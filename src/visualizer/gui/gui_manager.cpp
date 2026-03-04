@@ -562,7 +562,7 @@ namespace lfs::vis::gui {
                 fallback.key_super = fio.KeySuper;
                 fallback.screen_w = static_cast<int>(mvp->Size.x);
                 fallback.screen_h = static_cast<int>(mvp->Size.y);
-                fallback.bg_draw_list = ImGui::GetBackgroundDrawList(mvp);
+                fallback.bg_draw_list = ImGui::GetForegroundDrawList(mvp);
                 fallback.fg_draw_list = ImGui::GetForegroundDrawList(mvp);
                 hp->setInput(&fallback);
             }

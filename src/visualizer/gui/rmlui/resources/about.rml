@@ -8,7 +8,8 @@
   <span class="panel-title">{{title}}</span>
   <div class="separator"></div>
 
-  <p class="description">{{description}}</p>
+  <div class="description">{{description}}</div>
+  <div class="separator"></div>
 
   <span class="section-label">{{build_info_label}}</span>
   <div class="info-table">
