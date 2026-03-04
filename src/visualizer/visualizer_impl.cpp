@@ -27,6 +27,9 @@
 #include "tools/brush_tool.hpp"
 #include "tools/builtin_tools.hpp"
 #include "tools/selection_tool.hpp"
+// clang-format off
+#include <glad/glad.h>
+// clang-format on
 #include <cassert>
 #include <chrono>
 #include <iostream>
@@ -951,7 +954,16 @@ namespace lfs::vis {
         }
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
+
+        if (gui_manager_) {
+            gui_manager_->setRmlResizeDeferring(rendering_manager_->isViewportResizeDeferring());
+        }
         gui_manager_->render();
+
+        const bool resize_done = rendering_manager_->consumeResizeCompleted();
+        if (resize_done)
+            glFinish();
+
         window_manager_->swapBuffers();
 
         python::flush_signals();

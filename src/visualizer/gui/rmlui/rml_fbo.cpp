@@ -9,6 +9,7 @@
 #include "gui/rmlui/rml_fbo.hpp"
 #include "core/logger.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <imgui.h>
 
@@ -24,6 +25,9 @@ namespace lfs::vis::gui {
             glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
                                 GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         }
+
+        constexpr float kShrinkThreshold = 1.5f;
+        constexpr auto kShrinkCooldown = std::chrono::seconds(2);
     } // namespace
 
     RmlFBO::~RmlFBO() { destroy(); }
@@ -32,12 +36,28 @@ namespace lfs::vis::gui {
         assert(w > 0 && h > 0);
         if (w <= 0 || h <= 0)
             return;
-        if (fbo_ && width_ == w && height_ == h)
-            return;
 
-        destroy();
         width_ = w;
         height_ = h;
+
+        if (fbo_ && w <= alloc_w_ && h <= alloc_h_) {
+            maybeShrink();
+            return;
+        }
+
+        reallocate(std::max(w, alloc_w_), std::max(h, alloc_h_));
+    }
+
+    void RmlFBO::reallocate(int w, int h) {
+        const int target_w = width_;
+        const int target_h = height_;
+        destroy();
+
+        width_ = target_w;
+        height_ = target_h;
+        alloc_w_ = w;
+        alloc_h_ = h;
+        last_resize_time_ = std::chrono::steady_clock::now();
 
         glGenFramebuffers(1, &fbo_);
         glGenTextures(1, &texture_);
@@ -71,6 +91,18 @@ namespace lfs::vis::gui {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
+    void RmlFBO::maybeShrink() {
+        if (alloc_w_ <= static_cast<int>(width_ * kShrinkThreshold) &&
+            alloc_h_ <= static_cast<int>(height_ * kShrinkThreshold))
+            return;
+
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last_resize_time_ < kShrinkCooldown)
+            return;
+
+        reallocate(width_, height_);
+    }
+
     void RmlFBO::bind(GLint* prev_fbo) {
         assert(fbo_);
         assert(prev_fbo);
@@ -99,22 +131,26 @@ namespace lfs::vis::gui {
     void RmlFBO::blitToDrawList(ImDrawList* dl, ImVec2 pos, ImVec2 size) const {
         assert(dl);
         assert(texture_);
+        const float us = u_scale();
+        const float vs = v_scale();
         dl->AddCallback(setPremultipliedBlend, nullptr);
         const ImVec2 p1 = {pos.x + size.x, pos.y + size.y};
         dl->AddImage(static_cast<ImTextureID>(static_cast<uintptr_t>(texture_)),
-                     pos, p1, {0, 1}, {1, 0});
+                     pos, p1, {0, vs}, {us, 0});
         dl->AddCallback(restoreStandardBlend, nullptr);
     }
 
     void RmlFBO::blitToDrawListOpaque(void* draw_list, float x, float y, float w, float h) const {
         assert(draw_list);
         assert(texture_);
+        const float us = u_scale();
+        const float vs = v_scale();
         auto* dl = static_cast<ImDrawList*>(draw_list);
         dl->AddCallback(setPremultipliedBlend, nullptr);
         const ImVec2 p0(x, y);
         const ImVec2 p1(x + w, y + h);
         dl->AddImage(static_cast<ImTextureID>(static_cast<uintptr_t>(texture_)),
-                     p0, p1, {0, 1}, {1, 0});
+                     p0, p1, {0, vs}, {us, 0});
         dl->AddCallback(restoreStandardBlend, nullptr);
     }
 
@@ -130,10 +166,12 @@ namespace lfs::vis::gui {
 
     void RmlFBO::blitAsImage(float w, float h) {
         assert(texture_);
+        const float us = u_scale();
+        const float vs = v_scale();
         auto* dl = ImGui::GetWindowDrawList();
         dl->AddCallback(setPremultipliedBlend, nullptr);
         ImGui::Image(static_cast<ImTextureID>(static_cast<uintptr_t>(texture_)),
-                     ImVec2(w, h), ImVec2(0, 1), ImVec2(1, 0));
+                     ImVec2(w, h), ImVec2(0, vs), ImVec2(us, 0));
         dl->AddCallback(restoreStandardBlend, nullptr);
     }
 
@@ -200,31 +238,33 @@ namespace lfs::vis::gui {
 
         ensureBlitProgram();
 
-        static constexpr float verts[] = {
+        const float us = u_scale();
+        const float vs = v_scale();
+        const float verts[] = {
             -1.0f,
             -1.0f,
             0.0f,
             0.0f,
             1.0f,
             -1.0f,
-            1.0f,
+            us,
             0.0f,
             1.0f,
             1.0f,
-            1.0f,
-            1.0f,
+            us,
+            vs,
             -1.0f,
             -1.0f,
             0.0f,
             0.0f,
             1.0f,
             1.0f,
-            1.0f,
-            1.0f,
+            us,
+            vs,
             -1.0f,
             1.0f,
             0.0f,
-            1.0f,
+            vs,
         };
 
         GLint prev_program = 0;
@@ -261,7 +301,7 @@ namespace lfs::vis::gui {
 
         glBindVertexArray(blit_vao_);
         glBindBuffer(GL_ARRAY_BUFFER, blit_vbo_);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_DYNAMIC_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         glViewport(prev_viewport[0], prev_viewport[1], prev_viewport[2], prev_viewport[3]);
@@ -317,6 +357,8 @@ namespace lfs::vis::gui {
         }
         width_ = 0;
         height_ = 0;
+        alloc_w_ = 0;
+        alloc_h_ = 0;
     }
 
 } // namespace lfs::vis::gui

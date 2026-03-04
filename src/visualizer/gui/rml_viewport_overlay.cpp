@@ -159,41 +159,45 @@ namespace lfs::vis::gui {
             doc_registered_ = true;
         }
 
-        updateTheme();
+        if (!rml_manager_->shouldDeferFboUpdate(fbo_)) {
+            updateTheme();
 
-        const int w = static_cast<int>(vp_size_.x);
-        const int h = static_cast<int>(vp_size_.y);
+            const int w = static_cast<int>(vp_size_.x);
+            const int h = static_cast<int>(vp_size_.y);
 
-        auto* body = document_->GetElementById("overlay-body");
-        if (body) {
-            body->SetAttribute("data-vp-w", std::to_string(static_cast<int>(vp_size_.x)));
-            body->SetAttribute("data-vp-h", std::to_string(static_cast<int>(vp_size_.y)));
+            auto* body = document_->GetElementById("overlay-body");
+            if (body) {
+                body->SetAttribute("data-vp-w", std::to_string(static_cast<int>(vp_size_.x)));
+                body->SetAttribute("data-vp-h", std::to_string(static_cast<int>(vp_size_.y)));
+            }
+
+            rml_context_->SetDimensions(Rml::Vector2i(w, h));
+            rml_context_->Update();
+
+            fbo_.ensure(w, h);
+            if (!fbo_.valid())
+                return;
+
+            auto* render = rml_manager_->getRenderInterface();
+            assert(render);
+            render->SetViewport(w, h);
+
+            GLint prev_fbo = 0;
+            fbo_.bind(&prev_fbo);
+
+            render->BeginFrame();
+            rml_context_->Render();
+            render->EndFrame();
+
+            fbo_.unbind(prev_fbo);
         }
 
-        rml_context_->SetDimensions(Rml::Vector2i(w, h));
-        rml_context_->Update();
-
-        fbo_.ensure(w, h);
-        if (!fbo_.valid())
-            return;
-
-        auto* render = rml_manager_->getRenderInterface();
-        assert(render);
-        render->SetViewport(w, h);
-
-        GLint prev_fbo = 0;
-        fbo_.bind(&prev_fbo);
-
-        render->BeginFrame();
-        rml_context_->Render();
-        render->EndFrame();
-
-        fbo_.unbind(prev_fbo);
-
-        auto* vp = ImGui::GetMainViewport();
-        const ImVec2 blit_pos(vp_pos_.x, vp_pos_.y);
-        const ImVec2 blit_size(vp_size_.x, vp_size_.y);
-        fbo_.blitToDrawList(ImGui::GetForegroundDrawList(vp), blit_pos, blit_size);
+        if (fbo_.valid()) {
+            auto* vp = ImGui::GetMainViewport();
+            const ImVec2 blit_pos(vp_pos_.x, vp_pos_.y);
+            const ImVec2 blit_size(vp_size_.x, vp_size_.y);
+            fbo_.blitToDrawList(ImGui::GetForegroundDrawList(vp), blit_pos, blit_size);
+        }
     }
 
 } // namespace lfs::vis::gui

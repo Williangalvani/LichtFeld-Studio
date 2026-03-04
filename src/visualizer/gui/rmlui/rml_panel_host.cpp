@@ -247,6 +247,9 @@ namespace lfs::vis::gui {
     }
 
     void RmlPanelHost::renderIfDirty(int pw, int ph, float& display_h) {
+        if (manager_ && manager_->shouldDeferFboUpdate(fbo_))
+            return;
+
         const bool theme_dirty = syncThemeProperties();
         const bool size_dirty = (pw != last_fbo_w_ || ph != last_fbo_h_);
 

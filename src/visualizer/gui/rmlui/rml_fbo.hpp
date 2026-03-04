@@ -8,6 +8,8 @@
 #include <glad/glad.h>
 #include <imgui.h>
 
+#include <chrono>
+
 namespace lfs::vis::gui {
 
     class LFS_VIS_API RmlFBO {
@@ -38,6 +40,10 @@ namespace lfs::vis::gui {
 
     private:
         static void ensureBlitProgram();
+        void reallocate(int w, int h);
+        void maybeShrink();
+        float u_scale() const { return alloc_w_ > 0 ? static_cast<float>(width_) / static_cast<float>(alloc_w_) : 1.0f; }
+        float v_scale() const { return alloc_h_ > 0 ? static_cast<float>(height_) / static_cast<float>(alloc_h_) : 1.0f; }
 
         static GLuint blit_program_;
         static GLuint blit_vao_;
@@ -48,6 +54,9 @@ namespace lfs::vis::gui {
         GLuint depth_stencil_ = 0;
         int width_ = 0;
         int height_ = 0;
+        int alloc_w_ = 0;
+        int alloc_h_ = 0;
+        std::chrono::steady_clock::time_point last_resize_time_{};
     };
 
 } // namespace lfs::vis::gui

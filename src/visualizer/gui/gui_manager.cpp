@@ -1036,6 +1036,7 @@ namespace lfs::vis::gui {
         rml_viewport_overlay_.setViewportBounds(viewport_layout_.pos, viewport_layout_.size);
         rml_viewport_overlay_.processInput();
         reg.draw_panels(PanelSpace::ViewportOverlay, draw_ctx);
+
         rml_viewport_overlay_.render();
 
         if (rml_menu_bar_.isOpen() && rml_menu_bar_.fbo().valid()) {

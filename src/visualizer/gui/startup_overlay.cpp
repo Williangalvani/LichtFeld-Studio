@@ -271,50 +271,53 @@ namespace lfs::vis::gui {
         if (!rml_context_ || !document_)
             return;
 
-        updateTheme();
-        updateLocalizedText();
-
-        const int ctx_w = static_cast<int>(viewport.size.x);
-        const int ctx_h = static_cast<int>(viewport.size.y);
-
-        rml_context_->SetDimensions(Rml::Vector2i(ctx_w, ctx_h));
-        document_->SetProperty("width", std::format("{}px", ctx_w));
-        document_->SetProperty("height", std::format("{}px", ctx_h));
-        rml_context_->Update();
-
         ImVec2 overlay_box_pos = {};
         ImVec2 overlay_box_size = {};
         bool overlay_box_valid = false;
-        if (auto* overlay_box = document_->GetElementById("overlay-box")) {
-            const auto abs_offset = overlay_box->GetAbsoluteOffset(Rml::BoxArea::Border);
-            const float box_w = overlay_box->GetOffsetWidth();
-            const float box_h = overlay_box->GetOffsetHeight();
-            if (box_w > 1.0f && box_h > 1.0f) {
-                overlay_box_pos = {viewport.pos.x + abs_offset.x,
-                                   viewport.pos.y + abs_offset.y};
-                overlay_box_size = {box_w, box_h};
-                overlay_box_valid = overlay_box_size.x > 2.0f && overlay_box_size.y > 2.0f;
+
+        if (!rml_manager_->shouldDeferFboUpdate(fbo_)) {
+            updateTheme();
+            updateLocalizedText();
+
+            const int ctx_w = static_cast<int>(viewport.size.x);
+            const int ctx_h = static_cast<int>(viewport.size.y);
+
+            rml_context_->SetDimensions(Rml::Vector2i(ctx_w, ctx_h));
+            document_->SetProperty("width", std::format("{}px", ctx_w));
+            document_->SetProperty("height", std::format("{}px", ctx_h));
+            rml_context_->Update();
+
+            if (auto* overlay_box = document_->GetElementById("overlay-box")) {
+                const auto abs_offset = overlay_box->GetAbsoluteOffset(Rml::BoxArea::Border);
+                const float box_w = overlay_box->GetOffsetWidth();
+                const float box_h = overlay_box->GetOffsetHeight();
+                if (box_w > 1.0f && box_h > 1.0f) {
+                    overlay_box_pos = {viewport.pos.x + abs_offset.x,
+                                       viewport.pos.y + abs_offset.y};
+                    overlay_box_size = {box_w, box_h};
+                    overlay_box_valid = overlay_box_size.x > 2.0f && overlay_box_size.y > 2.0f;
+                }
             }
+
+            fbo_.ensure(ctx_w, ctx_h);
+            if (!fbo_.valid())
+                return;
+
+            forwardInput(viewport.pos.x, viewport.pos.y, viewport.size.x, viewport.size.y);
+
+            auto* render = rml_manager_->getRenderInterface();
+            assert(render);
+            render->SetViewport(ctx_w, ctx_h);
+
+            GLint prev_fbo = 0;
+            fbo_.bind(&prev_fbo);
+
+            render->BeginFrame();
+            rml_context_->Render();
+            render->EndFrame();
+
+            fbo_.unbind(prev_fbo);
         }
-
-        fbo_.ensure(ctx_w, ctx_h);
-        if (!fbo_.valid())
-            return;
-
-        forwardInput(viewport.pos.x, viewport.pos.y, viewport.size.x, viewport.size.y);
-
-        auto* render = rml_manager_->getRenderInterface();
-        assert(render);
-        render->SetViewport(ctx_w, ctx_h);
-
-        GLint prev_fbo = 0;
-        fbo_.bind(&prev_fbo);
-
-        render->BeginFrame();
-        rml_context_->Render();
-        render->EndFrame();
-
-        fbo_.unbind(prev_fbo);
 
         ImGui::SetNextWindowPos(ImVec2(viewport.pos.x, viewport.pos.y));
         ImGui::SetNextWindowSize(ImVec2(viewport.size.x, viewport.size.y));
@@ -378,7 +381,8 @@ namespace lfs::vis::gui {
                               to_u32(ImVec4(1, 1, 1, 1), is_light ? 0.08f : 0.05f),
                               ROUNDING - 1.0f);
             }
-            fbo_.blitAsImage(viewport.size.x, viewport.size.y);
+            if (fbo_.valid())
+                fbo_.blitAsImage(viewport.size.x, viewport.size.y);
         }
         ImGui::End();
         ImGui::PopStyleColor(1);

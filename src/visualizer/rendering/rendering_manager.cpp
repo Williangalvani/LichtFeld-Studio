@@ -507,8 +507,13 @@ namespace lfs::vis {
 
     void RenderingManager::setViewportResizeActive(bool active) {
         const bool was_active = viewport_resize_active_.exchange(active);
-        if (was_active && !active)
-            markDirty(DirtyFlag::VIEWPORT | DirtyFlag::CAMERA);
+        if (!was_active || active)
+            return;
+
+        if (viewport_resize_debounce_ == 0)
+            viewport_resize_debounce_ = 1;
+
+        markDirty(DirtyFlag::VIEWPORT | DirtyFlag::CAMERA | DirtyFlag::OVERLAY);
     }
 
     void RenderingManager::updateSettings(const RenderSettings& new_settings) {
@@ -752,16 +757,24 @@ namespace lfs::vis {
             return;
         }
 
+        constexpr int kResizeDebounceFrames = 3;
+        bool resize_completed = false;
+        const bool resize_active = viewport_resize_active_.load(std::memory_order_relaxed);
+
         if (current_size != last_viewport_size_) {
-            if (viewport_resize_active_.load(std::memory_order_relaxed)) {
-                LOG_DEBUG("Viewport resize (drag): {}x{}", current_size.x, current_size.y);
-                last_viewport_size_ = current_size;
+            last_viewport_size_ = current_size;
+            if (resize_active) {
                 markDirty(DirtyFlag::OVERLAY);
+                viewport_resize_debounce_ = kResizeDebounceFrames;
             } else {
-                LOG_DEBUG("Viewport resize: {}x{} -> {}x{}", last_viewport_size_.x, last_viewport_size_.y,
-                          current_size.x, current_size.y);
-                last_viewport_size_ = current_size;
+                markDirty(DirtyFlag::VIEWPORT | DirtyFlag::CAMERA | DirtyFlag::OVERLAY);
+            }
+        } else if (viewport_resize_debounce_ > 0 && !resize_active) {
+            if (--viewport_resize_debounce_ == 0) {
                 markDirty(DirtyFlag::VIEWPORT | DirtyFlag::CAMERA);
+                resize_completed = true;
+            } else {
+                markDirty(DirtyFlag::OVERLAY);
             }
         }
 
@@ -855,6 +868,11 @@ namespace lfs::vis {
         }
 
         doFullRender(context, scene_manager, model);
+
+        if (resize_completed) {
+            resize_completed_ = true;
+            lfs::core::Tensor::trim_memory_pool();
+        }
 
         if (context.viewport_region) {
             glDisable(GL_SCISSOR_TEST);
@@ -959,7 +977,6 @@ namespace lfs::vis {
 
         for (auto& pass : passes_) {
             if (pass->shouldExecute(frame_dirty, frame_ctx)) {
-                LOG_TRACE("Executing pass: {}", pass->name());
                 pass->execute(*engine_, frame_ctx, resources);
             }
         }

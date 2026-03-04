@@ -48,6 +48,7 @@ namespace lfs::vis {
             void init();
             void shutdown();
             void render();
+            void setRmlResizeDeferring(bool defer) { rmlui_manager_.setResizeDeferring(defer); }
 
             // Sub-manager access
             [[nodiscard]] AsyncTaskManager& asyncTasks() { return async_tasks_; }

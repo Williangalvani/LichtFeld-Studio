@@ -16,6 +16,7 @@ namespace Rml {
 
 namespace lfs::vis::gui {
 
+    class RmlFBO;
     class RmlSystemInterface;
     class RmlRenderInterface;
 
@@ -34,6 +35,9 @@ namespace lfs::vis::gui {
         Rml::Context* getContext(const std::string& name);
         void destroyContext(const std::string& name);
 
+        void setResizeDeferring(bool defer) { resize_deferring_ = defer; }
+        [[nodiscard]] bool shouldDeferFboUpdate(const RmlFBO& fbo) const;
+
         RmlRenderInterface* getRenderInterface() const { return render_interface_.get(); }
         SDL_Window* getWindow() const { return window_; }
 
@@ -43,6 +47,7 @@ namespace lfs::vis::gui {
         std::unordered_map<std::string, Rml::Context*> contexts_;
         SDL_Window* window_ = nullptr;
         float dp_ratio_ = 1.0f;
+        bool resize_deferring_ = false;
         bool initialized_ = false;
     };
 

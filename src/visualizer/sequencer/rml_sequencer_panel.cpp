@@ -746,28 +746,31 @@ namespace lfs::vis {
 
         forwardInput(input);
 
-        rml_context_->SetDimensions(Rml::Vector2i(w, h));
-        rml_context_->Update();
+        if (!rml_manager_->shouldDeferFboUpdate(fbo_)) {
+            rml_context_->SetDimensions(Rml::Vector2i(w, h));
+            rml_context_->Update();
 
-        fbo_.ensure(w, h);
-        if (!fbo_.valid())
-            return;
+            fbo_.ensure(w, h);
+            if (!fbo_.valid())
+                return;
 
-        auto* render_iface = rml_manager_->getRenderInterface();
-        assert(render_iface);
-        render_iface->SetViewport(w, h);
+            auto* render_iface = rml_manager_->getRenderInterface();
+            assert(render_iface);
+            render_iface->SetViewport(w, h);
 
-        GLint prev_fbo = 0;
-        fbo_.bind(&prev_fbo);
+            GLint prev_fbo = 0;
+            fbo_.bind(&prev_fbo);
 
-        render_iface->BeginFrame();
-        rml_context_->Render();
-        render_iface->EndFrame();
+            render_iface->BeginFrame();
+            rml_context_->Render();
+            render_iface->EndFrame();
 
-        fbo_.unbind(prev_fbo);
+            fbo_.unbind(prev_fbo);
+        }
 
-        fbo_.blitToScreen(panel_x, panel_y, panel_width, cached_height_,
-                          input.screen_w, input.screen_h);
+        if (fbo_.valid())
+            fbo_.blitToScreen(panel_x, panel_y, panel_width, cached_height_,
+                              input.screen_w, input.screen_h);
 
         const float inner_pad_h = INNER_PADDING_H * dp;
         const float inner_pad = INNER_PADDING * dp;

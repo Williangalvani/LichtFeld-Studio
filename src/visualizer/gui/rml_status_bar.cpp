@@ -584,34 +584,37 @@ namespace lfs::vis::gui {
         if (avail_w <= 0 || avail_h <= 0)
             return;
 
-        updateTheme();
-        updateContent(ctx);
+        if (!rml_manager_->shouldDeferFboUpdate(fbo_)) {
+            updateTheme();
+            updateContent(ctx);
 
-        const int w = static_cast<int>(avail_w);
-        const int h = static_cast<int>(avail_h);
+            const int w = static_cast<int>(avail_w);
+            const int h = static_cast<int>(avail_h);
 
-        rml_context_->SetDimensions(Rml::Vector2i(w, h));
-        document_->SetProperty("height", std::format("{}px", h));
-        rml_context_->Update();
+            rml_context_->SetDimensions(Rml::Vector2i(w, h));
+            document_->SetProperty("height", std::format("{}px", h));
+            rml_context_->Update();
 
-        fbo_.ensure(w, h);
-        if (!fbo_.valid())
-            return;
+            fbo_.ensure(w, h);
+            if (!fbo_.valid())
+                return;
 
-        auto* render = rml_manager_->getRenderInterface();
-        assert(render);
-        render->SetViewport(w, h);
+            auto* render = rml_manager_->getRenderInterface();
+            assert(render);
+            render->SetViewport(w, h);
 
-        GLint prev_fbo = 0;
-        fbo_.bind(&prev_fbo);
+            GLint prev_fbo = 0;
+            fbo_.bind(&prev_fbo);
 
-        render->BeginFrame();
-        rml_context_->Render();
-        render->EndFrame();
+            render->BeginFrame();
+            rml_context_->Render();
+            render->EndFrame();
 
-        fbo_.unbind(prev_fbo);
+            fbo_.unbind(prev_fbo);
+        }
 
-        fbo_.blitAsImage(avail_w, avail_h);
+        if (fbo_.valid())
+            fbo_.blitAsImage(avail_w, avail_h);
     }
 
 } // namespace lfs::vis::gui

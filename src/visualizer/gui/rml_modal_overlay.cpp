@@ -314,54 +314,58 @@ namespace lfs::vis::gui {
         if (!active_)
             return;
 
-        syncTheme();
+        if (!rml_manager_->shouldDeferFboUpdate(fbo_)) {
+            syncTheme();
 
-        const int w = screen_w;
-        const int h = screen_h;
+            const int w = screen_w;
+            const int h = screen_h;
 
-        if (w <= 0 || h <= 0)
-            return;
+            if (w <= 0 || h <= 0)
+                return;
 
-        if (w != width_ || h != height_) {
-            width_ = w;
-            height_ = h;
-            rml_context_->SetDimensions(Rml::Vector2i(w, h));
-        }
+            if (w != width_ || h != height_) {
+                width_ = w;
+                height_ = h;
+                rml_context_->SetDimensions(Rml::Vector2i(w, h));
+            }
 
-        rml_context_->Update();
-
-        if (el_dialog_ && active_) {
-            const float dp_ratio = rml_manager_->getDpRatio();
-            const float dialog_w = static_cast<float>(active_->width_dp) * dp_ratio;
-            const float dialog_h = el_dialog_->GetClientHeight();
-            const float vp_cx = vp_x + vp_w * 0.5f;
-            const float vp_cy = vp_y + vp_h * 0.5f;
-            el_dialog_->SetProperty("left", std::format("{}px", vp_cx - dialog_w * 0.5f));
-            el_dialog_->SetProperty("top", std::format("{}px", vp_cy - dialog_h * 0.5f));
             rml_context_->Update();
+
+            if (el_dialog_ && active_) {
+                const float dp_ratio = rml_manager_->getDpRatio();
+                const float dialog_w = static_cast<float>(active_->width_dp) * dp_ratio;
+                const float dialog_h = el_dialog_->GetClientHeight();
+                const float vp_cx = vp_x + vp_w * 0.5f;
+                const float vp_cy = vp_y + vp_h * 0.5f;
+                el_dialog_->SetProperty("left", std::format("{}px", vp_cx - dialog_w * 0.5f));
+                el_dialog_->SetProperty("top", std::format("{}px", vp_cy - dialog_h * 0.5f));
+                rml_context_->Update();
+            }
+
+            fbo_.ensure(w, h);
+            if (!fbo_.valid())
+                return;
+
+            auto* render_iface = rml_manager_->getRenderInterface();
+            assert(render_iface);
+            render_iface->SetViewport(w, h);
+
+            GLint prev_fbo = 0;
+            fbo_.bind(&prev_fbo);
+
+            render_iface->BeginFrame();
+            rml_context_->Render();
+            render_iface->EndFrame();
+
+            fbo_.unbind(prev_fbo);
         }
 
-        fbo_.ensure(w, h);
-        if (!fbo_.valid())
-            return;
-
-        auto* render_iface = rml_manager_->getRenderInterface();
-        assert(render_iface);
-        render_iface->SetViewport(w, h);
-
-        GLint prev_fbo = 0;
-        fbo_.bind(&prev_fbo);
-
-        render_iface->BeginFrame();
-        rml_context_->Render();
-        render_iface->EndFrame();
-
-        fbo_.unbind(prev_fbo);
-
-        auto* vp = ImGui::GetMainViewport();
-        const ImVec2 pos(0, 0);
-        const ImVec2 size(static_cast<float>(screen_w), static_cast<float>(screen_h));
-        fbo_.blitToDrawList(ImGui::GetForegroundDrawList(vp), pos, size);
+        if (fbo_.valid()) {
+            auto* vp = ImGui::GetMainViewport();
+            const ImVec2 pos(0, 0);
+            const ImVec2 size(static_cast<float>(screen_w), static_cast<float>(screen_h));
+            fbo_.blitToDrawList(ImGui::GetForegroundDrawList(vp), pos, size);
+        }
     }
 
     void RmlModalOverlay::destroyGLResources() {

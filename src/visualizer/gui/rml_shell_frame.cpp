@@ -122,28 +122,31 @@ namespace lfs::vis::gui {
             status_region_->SetProperty("height", std::format("{:.0f}px", regions.status_size.y));
         }
 
-        rml_context_->SetDimensions(Rml::Vector2i(w, h));
-        rml_context_->Update();
+        if (!rml_manager_->shouldDeferFboUpdate(fbo_)) {
+            rml_context_->SetDimensions(Rml::Vector2i(w, h));
+            rml_context_->Update();
 
-        fbo_.ensure(w, h);
-        if (!fbo_.valid())
-            return;
+            fbo_.ensure(w, h);
+            if (!fbo_.valid())
+                return;
 
-        auto* render = rml_manager_->getRenderInterface();
-        assert(render);
-        render->SetViewport(w, h);
+            auto* render = rml_manager_->getRenderInterface();
+            assert(render);
+            render->SetViewport(w, h);
 
-        GLint prev_fbo = 0;
-        fbo_.bind(&prev_fbo);
+            GLint prev_fbo = 0;
+            fbo_.bind(&prev_fbo);
 
-        render->BeginFrame();
-        rml_context_->Render();
-        render->EndFrame();
+            render->BeginFrame();
+            rml_context_->Render();
+            render->EndFrame();
 
-        fbo_.unbind(prev_fbo);
+            fbo_.unbind(prev_fbo);
+        }
 
-        fbo_.blitToDrawList(ImGui::GetBackgroundDrawList(vp),
-                            vp->Pos, vp->Size);
+        if (fbo_.valid())
+            fbo_.blitToDrawList(ImGui::GetBackgroundDrawList(vp),
+                                vp->Pos, vp->Size);
     }
 
 } // namespace lfs::vis::gui

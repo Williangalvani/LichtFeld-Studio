@@ -125,27 +125,30 @@ namespace lfs::vis::gui {
         if (px_w <= 0 || px_h <= 0)
             return;
 
-        if (px_w != width_ || px_h != height_)
-            resize(px_w, px_h);
+        if (!mgr_->shouldDeferFboUpdate(fbo_)) {
+            if (px_w != width_ || px_h != height_)
+                resize(px_w, px_h);
 
-        fbo_.ensure(px_w, px_h);
-        if (!fbo_.valid())
-            return;
+            fbo_.ensure(px_w, px_h);
+            if (!fbo_.valid())
+                return;
 
-        auto* render_iface = mgr_->getRenderInterface();
-        assert(render_iface);
-        render_iface->SetViewport(px_w, px_h);
+            auto* render_iface = mgr_->getRenderInterface();
+            assert(render_iface);
+            render_iface->SetViewport(px_w, px_h);
 
-        GLint prev_fbo = 0;
-        fbo_.bind(&prev_fbo);
+            GLint prev_fbo = 0;
+            fbo_.bind(&prev_fbo);
 
-        render_iface->BeginFrame();
-        ctx_->Render();
-        render_iface->EndFrame();
+            render_iface->BeginFrame();
+            ctx_->Render();
+            render_iface->EndFrame();
 
-        fbo_.unbind(prev_fbo);
+            fbo_.unbind(prev_fbo);
+        }
 
-        fbo_.blitToScreen(x, y, w, h, screen_w, screen_h);
+        if (fbo_.valid())
+            fbo_.blitToScreen(x, y, w, h, screen_w, screen_h);
     }
 
     void RmlOverlayContext::forwardMouseInput(const PanelInputState& input,

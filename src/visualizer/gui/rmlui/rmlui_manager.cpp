@@ -8,6 +8,7 @@
 #include "gui/rmlui/elements/color_picker_element.hpp"
 #include "gui/rmlui/elements/crf_curve_element.hpp"
 #include "gui/rmlui/elements/loss_graph_element.hpp"
+#include "gui/rmlui/rml_fbo.hpp"
 #include "gui/rmlui/rmlui_render_interface.hpp"
 #include "gui/rmlui/rmlui_system_interface.hpp"
 #include "internal/resource_paths.hpp"
@@ -103,6 +104,7 @@ namespace lfs::vis::gui {
         Rml::Shutdown();
         render_interface_.reset();
         system_interface_.reset();
+        resize_deferring_ = false;
         initialized_ = false;
 
         LOG_INFO("RmlUI shut down");
@@ -148,6 +150,10 @@ namespace lfs::vis::gui {
             Rml::RemoveContext(name);
             contexts_.erase(it);
         }
+    }
+
+    bool RmlUIManager::shouldDeferFboUpdate(const RmlFBO& fbo) const {
+        return resize_deferring_ && fbo.valid();
     }
 
 } // namespace lfs::vis::gui

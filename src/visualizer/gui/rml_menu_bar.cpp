@@ -419,7 +419,8 @@ namespace lfs::vis::gui {
     void RmlMenuBar::draw(int screen_w, int screen_h) {
         if (!rml_context_ || !document_)
             return;
-
+        if (rml_manager_->shouldDeferFboUpdate(fbo_))
+            return;
         updateTheme();
 
         const float dp_ratio = rml_manager_->getDpRatio();

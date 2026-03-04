@@ -323,70 +323,66 @@ namespace lfs::vis::gui {
         const bool needs_render = render_needed_ || theme_changed || layout_changed ||
                                   tabs_changed || dims_changed || input_dirty_;
 
-        if (!needs_render) {
+        if (needs_render && !rml_manager_->shouldDeferFboUpdate(fbo_)) {
+            const float dp_ratio = rml_manager_->getDpRatio();
+            const float tab_bar_h = PanelLayoutManager::TAB_BAR_H * dp_ratio;
+
+            if (resize_handle_el_) {
+                resize_handle_el_->SetProperty("top", "0px");
+                resize_handle_el_->SetProperty("height", std::format("{:.0f}px", layout.size.y));
+            }
+            if (left_border_el_) {
+                left_border_el_->SetProperty("top", "0px");
+                left_border_el_->SetProperty("height", std::format("{:.0f}px", layout.size.y));
+            }
+            if (splitter_el_) {
+                splitter_el_->SetProperty("top", std::format("{:.0f}px", layout.scene_h));
+                splitter_el_->SetProperty("height", std::format("{:.0f}px", layout.splitter_h));
+            }
+            if (tab_bar_el_) {
+                const float tab_top = layout.scene_h + layout.splitter_h;
+                tab_bar_el_->SetProperty("top", std::format("{:.0f}px", tab_top));
+                tab_bar_el_->SetProperty("height", std::format("{:.0f}px", tab_bar_h));
+            }
+            if (tab_separator_el_) {
+                const float sep_top = layout.scene_h + layout.splitter_h + tab_bar_h;
+                tab_separator_el_->SetProperty("top", std::format("{:.0f}px", sep_top));
+            }
+
+            rml_context_->SetDimensions(Rml::Vector2i(w, h));
+            rml_context_->Update();
+
+            fbo_.ensure(w, h);
+            if (!fbo_.valid())
+                return;
+
+            auto* render = rml_manager_->getRenderInterface();
+            assert(render);
+            render->SetViewport(w, h);
+
+            GLint prev_fbo = 0;
+            fbo_.bind(&prev_fbo);
+
+            render->BeginFrame();
+            rml_context_->Render();
+            render->EndFrame();
+
+            fbo_.unbind(prev_fbo);
+
+            last_fbo_w_ = w;
+            last_fbo_h_ = h;
+            last_scene_h_ = layout.scene_h;
+            last_splitter_h_ = layout.splitter_h;
+            render_needed_ = false;
+            input_dirty_ = false;
+        }
+
+        if (fbo_.valid()) {
             auto* vp = ImGui::GetMainViewport();
             fbo_.blitToDrawList(ImGui::GetForegroundDrawList(vp),
                                 {layout.pos.x, layout.pos.y},
                                 {layout.size.x, layout.size.y});
-            return;
         }
-
-        const float dp_ratio = rml_manager_->getDpRatio();
-        const float tab_bar_h = PanelLayoutManager::TAB_BAR_H * dp_ratio;
-
-        if (resize_handle_el_) {
-            resize_handle_el_->SetProperty("top", "0px");
-            resize_handle_el_->SetProperty("height", std::format("{:.0f}px", layout.size.y));
-        }
-        if (left_border_el_) {
-            left_border_el_->SetProperty("top", "0px");
-            left_border_el_->SetProperty("height", std::format("{:.0f}px", layout.size.y));
-        }
-        if (splitter_el_) {
-            splitter_el_->SetProperty("top", std::format("{:.0f}px", layout.scene_h));
-            splitter_el_->SetProperty("height", std::format("{:.0f}px", layout.splitter_h));
-        }
-        if (tab_bar_el_) {
-            const float tab_top = layout.scene_h + layout.splitter_h;
-            tab_bar_el_->SetProperty("top", std::format("{:.0f}px", tab_top));
-            tab_bar_el_->SetProperty("height", std::format("{:.0f}px", tab_bar_h));
-        }
-        if (tab_separator_el_) {
-            const float sep_top = layout.scene_h + layout.splitter_h + tab_bar_h;
-            tab_separator_el_->SetProperty("top", std::format("{:.0f}px", sep_top));
-        }
-
-        rml_context_->SetDimensions(Rml::Vector2i(w, h));
-        rml_context_->Update();
-
-        fbo_.ensure(w, h);
-        if (!fbo_.valid())
-            return;
-
-        auto* render = rml_manager_->getRenderInterface();
-        assert(render);
-        render->SetViewport(w, h);
-
-        GLint prev_fbo = 0;
-        fbo_.bind(&prev_fbo);
-
-        render->BeginFrame();
-        rml_context_->Render();
-        render->EndFrame();
-
-        fbo_.unbind(prev_fbo);
-
-        last_fbo_w_ = w;
-        last_fbo_h_ = h;
-        last_scene_h_ = layout.scene_h;
-        last_splitter_h_ = layout.splitter_h;
-        render_needed_ = false;
-        input_dirty_ = false;
-
-        auto* vp = ImGui::GetMainViewport();
-        fbo_.blitToDrawList(ImGui::GetForegroundDrawList(vp),
-                            {layout.pos.x, layout.pos.y},
-                            {layout.size.x, layout.size.y});
     }
 
 } // namespace lfs::vis::gui

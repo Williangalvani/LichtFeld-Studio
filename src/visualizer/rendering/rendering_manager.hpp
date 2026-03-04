@@ -19,6 +19,7 @@
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace lfs::vis {
@@ -293,6 +294,10 @@ namespace lfs::vis {
         void setEllipsoidGizmoActive(bool active) { ellipsoid_gizmo_active_ = active; }
 
         void setViewportResizeActive(bool active);
+        [[nodiscard]] bool isViewportResizeDeferring() const {
+            return viewport_resize_active_.load(std::memory_order_relaxed) || viewport_resize_debounce_ > 0;
+        }
+        bool consumeResizeCompleted() { return std::exchange(resize_completed_, false); }
 
     private:
         static int64_t to_ns(std::chrono::steady_clock::time_point tp) {
@@ -417,6 +422,8 @@ namespace lfs::vis {
         glm::mat4 pending_ellipsoid_transform_{1.0f};
 
         std::atomic<bool> viewport_resize_active_{false};
+        int viewport_resize_debounce_{0};
+        bool resize_completed_{false};
     };
 
 } // namespace lfs::vis
