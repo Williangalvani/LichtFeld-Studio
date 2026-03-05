@@ -88,7 +88,12 @@
 #mask-overlay {
     position: absolute;
     top: 0;
+    bottom: 0;
     left: 0;
+    right: 0;
+    margin: auto;
+    max-width: 100%;
+    max-height: 100%;
     display: none;
     image-color: rgba(255, 50, 50, 128);
 }

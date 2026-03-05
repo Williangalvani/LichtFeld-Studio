@@ -270,6 +270,7 @@ class ImagePreviewPanel(RmlPanel):
                 mask_path = self._mask_paths[self._current_index]
                 mask_img.set_attribute("src", str(mask_path))
                 mask_img.set_attribute("class", "visible")
+                self._apply_zoom(mask_img, path)
             else:
                 mask_img.set_attribute("class", "")
                 mask_img.set_attribute("src", "")
