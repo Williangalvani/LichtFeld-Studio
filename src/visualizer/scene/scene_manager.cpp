@@ -38,23 +38,6 @@ namespace lfs::vis {
 
     namespace {
         constexpr float DEFAULT_VOXEL_SIZE = 0.01f;
-
-        float computeVoxelSize(const lfs::core::PointCloud* point_cloud) {
-            if (!point_cloud || point_cloud->size() == 0)
-                return DEFAULT_VOXEL_SIZE;
-            auto means_cpu = point_cloud->means.cpu();
-            auto min_vals = means_cpu.min(0);
-            auto max_vals = means_cpu.max(0);
-            const glm::vec3 extent(
-                max_vals.slice(0, 0, 1).item<float>() - min_vals.slice(0, 0, 1).item<float>(),
-                max_vals.slice(0, 1, 2).item<float>() - min_vals.slice(0, 1, 2).item<float>(),
-                max_vals.slice(0, 2, 3).item<float>() - min_vals.slice(0, 2, 3).item<float>());
-            const float diagonal = glm::length(extent);
-            if (diagonal <= 0.0f)
-                return DEFAULT_VOXEL_SIZE;
-            const float cbrt_n = std::cbrt(static_cast<float>(point_cloud->size()));
-            return diagonal / cbrt_n * 0.3f;
-        }
     } // namespace
 
     using namespace lfs::core::events;
@@ -1423,9 +1406,7 @@ namespace lfs::vis {
             python::set_application_scene(&scene_);
 
             if ((num_gaussians > 0 || num_points > 0) && services().trainerOrNull() && services().trainerOrNull()->getTrainer()) {
-                const float voxel_size = computeVoxelSize(point_cloud);
-                ui::PointCloudModeChanged{.enabled = true, .voxel_size = voxel_size}.emit();
-                LOG_INFO("Switched to point cloud mode ({} points, voxel_size={})", num_gaussians > 0 ? num_gaussians : num_points, voxel_size);
+                ui::PointCloudModeChanged{.enabled = true, .voxel_size = DEFAULT_VOXEL_SIZE}.emit();
             }
 
             return {};
@@ -1537,9 +1518,8 @@ namespace lfs::vis {
 
             // Switch to point cloud rendering mode by default for datasets
             if ((num_gaussians > 0 || num_points > 0) && services().trainerOrNull() && services().trainerOrNull()->getTrainer()) {
-                const float voxel_size = computeVoxelSize(point_cloud);
-                ui::PointCloudModeChanged{.enabled = true, .voxel_size = voxel_size}.emit();
-                LOG_INFO("Switched to point cloud mode ({} points, voxel_size={})", num_gaussians > 0 ? num_gaussians : num_points, voxel_size);
+                ui::PointCloudModeChanged{.enabled = true, .voxel_size = DEFAULT_VOXEL_SIZE}.emit();
+                LOG_INFO("Switched to point cloud mode ({} points)", num_gaussians > 0 ? num_gaussians : num_points);
             }
 
         } catch (const std::exception& e) {
