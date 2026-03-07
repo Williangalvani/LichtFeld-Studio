@@ -82,8 +82,17 @@
     padding: 8dp;
     display: flex;
     flex-direction: column;
-    transition: border-color 0.15s quadratic-out;
+    transition: border-color background-color 0.15s quadratic-out;
 }
+
+.plugin-card:hover {
+    border-color: #89b4fa;
+    background-color: #313244;
+}
+
+.plugin-card.card--in-progress { border-color: #89b4fa; }
+.plugin-card.card--success     { border-color: #a6e3a1; }
+.plugin-card.card--error       { border-color: #f38ba8; }
 
 /* ── Card info area ───────────────────────────────────── */
 
