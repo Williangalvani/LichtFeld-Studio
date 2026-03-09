@@ -140,6 +140,13 @@ namespace lfs::vis::gui {
                                          screen_w, screen_h,
                                          cmd.clip_x1, cmd.clip_y1,
                                          cmd.clip_x2, cmd.clip_y2);
+            if (cmd.popover_shadow) {
+                const auto& shadow = *cmd.popover_shadow;
+                widgets::DrawPopoverShadowOverlay(ImGui::GetForegroundDrawList(),
+                                                  {shadow.x, shadow.y},
+                                                  {shadow.w, shadow.h},
+                                                  shadow.rounding);
+            }
         }
         queued_foreground_composites_.clear();
     }
@@ -186,6 +193,10 @@ namespace lfs::vis::gui {
                                  w - bottom_right, h - bottom_right) &&
                    inside_corner(0.0f, h - bottom_left, bottom_left, bottom_left,
                                  h - bottom_left);
+        }
+
+        float maxCornerRadius(const Rml::CornerSizes& radii) {
+            return std::max({radii[0], radii[1], radii[2], radii[3]});
         }
 
         bool isTextEditableElement(Rml::Element* element) {
@@ -668,7 +679,20 @@ namespace lfs::vis::gui {
 
         renderIfDirty(w, h, display_h);
 
+        const ImVec2 panel_screen_pos = ImGui::GetCursorScreenPos();
         fbo_.blitAsImage(avail_w, display_h);
+        if (auto* vp = ImGui::GetMainViewport()) {
+            const auto popup_shadow =
+                collectVisibleColorPickerPopupShadow(panel_screen_pos.x, panel_screen_pos.y);
+            if (popup_shadow) {
+                const auto& shadow = *popup_shadow;
+                auto* fg = ImGui::GetForegroundDrawList(vp);
+                widgets::DrawPopoverShadowOverlay(fg,
+                                                  {shadow.x, shadow.y},
+                                                  {shadow.w, shadow.h},
+                                                  shadow.rounding);
+            }
+        }
     }
 
     void RmlPanelHost::resolveDirectRenderHeight(float requested_h, int& ph, float& display_h) const {
@@ -738,6 +762,69 @@ namespace lfs::vis::gui {
         compositeDirectToScreen(x, y, w, display_h);
     }
 
+    std::optional<RmlPanelHost::ShadowRect> RmlPanelHost::collectVisibleColorPickerPopupShadow(
+        const float panel_screen_x, const float panel_screen_y) const {
+        if (!document_)
+            return std::nullopt;
+
+        auto* popup = document_->GetElementById("color-picker-popup");
+        if (!popup || !popup->IsClassSet("visible"))
+            return std::nullopt;
+
+        float popup_x = 0.0f;
+        float popup_y = 0.0f;
+        float popup_w = 0.0f;
+        float popup_h = 0.0f;
+
+        if (auto* picker = popup->GetElementById("color-picker-el")) {
+            const auto picker_size = picker->GetBox().GetSize(Rml::BoxArea::Border);
+            if (picker_size.x > 0.0f && picker_size.y > 0.0f) {
+                const auto picker_pos = picker->GetAbsoluteOffset(Rml::BoxArea::Border);
+                const auto& popup_box = popup->GetBox();
+                const float extra_left =
+                    popup_box.GetEdge(Rml::BoxArea::Padding, Rml::BoxEdge::Left) +
+                    popup_box.GetEdge(Rml::BoxArea::Border, Rml::BoxEdge::Left);
+                const float extra_top =
+                    popup_box.GetEdge(Rml::BoxArea::Padding, Rml::BoxEdge::Top) +
+                    popup_box.GetEdge(Rml::BoxArea::Border, Rml::BoxEdge::Top);
+                const float extra_right =
+                    popup_box.GetEdge(Rml::BoxArea::Padding, Rml::BoxEdge::Right) +
+                    popup_box.GetEdge(Rml::BoxArea::Border, Rml::BoxEdge::Right);
+                const float extra_bottom =
+                    popup_box.GetEdge(Rml::BoxArea::Padding, Rml::BoxEdge::Bottom) +
+                    popup_box.GetEdge(Rml::BoxArea::Border, Rml::BoxEdge::Bottom);
+
+                popup_x = picker_pos.x - extra_left;
+                popup_y = picker_pos.y - extra_top;
+                popup_w = picker_size.x + extra_left + extra_right;
+                popup_h = picker_size.y + extra_top + extra_bottom;
+            }
+        }
+
+        if (popup_w <= 0.0f || popup_h <= 0.0f) {
+            const auto popup_size = popup->GetBox().GetSize(Rml::BoxArea::Border);
+            if (popup_size.x <= 0.0f || popup_size.y <= 0.0f)
+                return std::nullopt;
+
+            const auto popup_pos = popup->GetAbsoluteOffset(Rml::BoxArea::Border);
+            popup_x = popup_pos.x;
+            popup_y = popup_pos.y;
+            popup_w = popup_size.x;
+            popup_h = popup_size.y;
+        }
+
+        if (popup_w <= 0.0f || popup_h <= 0.0f)
+            return std::nullopt;
+
+        return ShadowRect{
+            .x = panel_screen_x + popup_x,
+            .y = panel_screen_y + popup_y,
+            .w = popup_w,
+            .h = popup_h,
+            .rounding = maxCornerRadius(popup->GetComputedValues().border_radius()),
+        };
+    }
+
     void RmlPanelHost::compositeDirectToScreen(const float x, const float y,
                                                const float w, const float h) const {
         if (!input_ || !fbo_.valid() || w <= 0.0f || h <= 0.0f)
@@ -762,6 +849,7 @@ namespace lfs::vis::gui {
         const float screen_clip_y1 = clip_y1 - input_->screen_y;
         const float screen_clip_x2 = clip_x2 - input_->screen_x;
         const float screen_clip_y2 = clip_y2 - input_->screen_y;
+        const auto popover_shadow = collectVisibleColorPickerPopupShadow(screen_x, screen_y);
 
         if (foreground_) {
             queued_foreground_composites_.push_back({
@@ -774,6 +862,7 @@ namespace lfs::vis::gui {
                 .clip_y1 = screen_clip_y1,
                 .clip_x2 = screen_clip_x2,
                 .clip_y2 = screen_clip_y2,
+                .popover_shadow = popover_shadow,
             });
             return;
         }
@@ -782,6 +871,13 @@ namespace lfs::vis::gui {
                                  input_->screen_w, input_->screen_h,
                                  screen_clip_x1, screen_clip_y1,
                                  screen_clip_x2, screen_clip_y2);
+        if (popover_shadow) {
+            const auto& shadow = *popover_shadow;
+            widgets::DrawPopoverShadowOverlay(ImGui::GetForegroundDrawList(),
+                                              {shadow.x, shadow.y},
+                                              {shadow.w, shadow.h},
+                                              shadow.rounding);
+        }
     }
 
     bool RmlPanelHost::hitTestPanelShape(const float local_x, const float local_y,

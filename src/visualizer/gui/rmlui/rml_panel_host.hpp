@@ -9,6 +9,7 @@
 #include <core/export.hpp>
 #include <cstddef>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -76,7 +77,17 @@ namespace lfs::vis::gui {
         static void pushTextInput(const std::string& text);
 
     private:
+        struct ShadowRect {
+            float x = 0.0f;
+            float y = 0.0f;
+            float w = 0.0f;
+            float h = 0.0f;
+            float rounding = 0.0f;
+        };
+
         static std::vector<uint32_t> drainTextInput();
+        std::optional<ShadowRect> collectVisibleColorPickerPopupShadow(float panel_screen_x,
+                                                                       float panel_screen_y) const;
         bool hitTestPanelShape(float local_x, float local_y, float logical_w, float logical_h);
         bool forwardInput(float panel_x, float panel_y);
         bool syncThemeProperties();
@@ -102,6 +113,7 @@ namespace lfs::vis::gui {
             float clip_y1 = 0.0f;
             float clip_x2 = 0.0f;
             float clip_y2 = 0.0f;
+            std::optional<ShadowRect> popover_shadow;
         };
 
         RmlUIManager* manager_;

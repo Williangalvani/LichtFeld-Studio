@@ -35,7 +35,8 @@ namespace lfs::vis::gui::widgets {
     void DrawFloatingWindowShadow(ImDrawList* draw_list, const ImVec2& pos, const ImVec2& size,
                                   float rounding = 6.0f);
     void DrawFloatingWindowShadow(const ImVec2& pos, const ImVec2& size, float rounding = 6.0f);
-    void DrawPopoverShadow(const ImVec2& pos, const ImVec2& size, float rounding = 6.0f);
+    void DrawPopoverShadowOverlay(ImDrawList* draw_list, const ImVec2& pos, const ImVec2& size,
+                                  float rounding = 6.0f);
     void DrawModalShadow(ImDrawList* draw_list, const ImVec2& pos, const ImVec2& size,
                          float rounding = 6.0f);
     void DrawWindowShadow(const ImVec2& pos, const ImVec2& size, float rounding = 6.0f);
