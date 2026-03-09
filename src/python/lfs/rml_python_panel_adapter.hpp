@@ -6,6 +6,7 @@
 
 #include "gui/panel_registry.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <nanobind/nanobind.h>
 #include <string>
@@ -49,6 +50,7 @@ namespace lfs::vis::gui {
         Rml::ElementDocument* ensureDocumentInitialized();
         void syncDirectLayout(float w, float h);
         Rml::ElementDocument* prepareForRender(const PanelDrawContext* ctx);
+        std::chrono::milliseconds updateInterval() const;
 
         void* host_ = nullptr;
         void* manager_;
@@ -67,6 +69,9 @@ namespace lfs::vis::gui {
         uint64_t last_scene_gen_ = 0;
         uint64_t last_prepare_frame_ = 0;
         bool content_dirty_ = false;
+        bool has_update_interval_ = false;
+        int update_interval_ms_ = 100;
+        std::chrono::steady_clock::time_point next_update_at_{};
     };
 
 } // namespace lfs::vis::gui

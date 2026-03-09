@@ -58,6 +58,7 @@ class PluginMarketplacePanel(RmlPanel):
     rml_template = "rmlui/plugin_marketplace.rml"
     rml_height_mode = "content"
     initial_width = 770
+    update_interval_ms = 100
 
     def __init__(self):
         self._catalog = PluginMarketplaceCatalog()

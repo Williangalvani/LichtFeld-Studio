@@ -124,6 +124,7 @@ class RenderingPanel(RmlPanel):
     order = 10
     rml_template = "rmlui/rendering.rml"
     rml_height_mode = "content"
+    update_interval_ms = 100
 
     def __init__(self):
         self._handle = None

@@ -1022,6 +1022,8 @@ namespace lfs::vis::gui {
                 ImGui::GetIO().WantCaptureMouse = true;
 
             rml_menu_bar_.draw(menu_input.screen_w, menu_input.screen_h);
+        } else {
+            rml_menu_bar_.suspend();
         }
 
         updateInputOverrides(mouse_in_viewport);
@@ -1298,7 +1300,7 @@ namespace lfs::vis::gui {
         RmlPanelHost::flushQueuedForegroundComposites(panel_input.screen_w, panel_input.screen_h);
         sequencer_ui_.compositeOverlays(panel_input.screen_w, panel_input.screen_h);
 
-        if (rml_menu_bar_.fbo().valid()) {
+        if (menu_bar_ && !ui_hidden_ && rml_menu_bar_.fbo().valid()) {
             const float menu_height = rml_menu_bar_.isOpen()
                                           ? static_cast<float>(panel_input.screen_h)
                                           : rml_menu_bar_.barHeight();

@@ -21,6 +21,7 @@ class SelectionGroupsPanel(RmlPanel):
     order = 110
     rml_template = "rmlui/selection_groups.rml"
     rml_height_mode = "content"
+    update_interval_ms = 50
 
     def __init__(self):
         self.doc = None

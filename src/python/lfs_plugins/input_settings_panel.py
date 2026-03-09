@@ -15,6 +15,7 @@ class InputSettingsPanel(RmlPanel):
     rml_height_mode = "content"
     initial_width = 500
     options = {"DEFAULT_CLOSED"}
+    update_interval_ms = 50
 
     TOOL_MODES = [
         lf.keymap.ToolMode.GLOBAL,

@@ -53,6 +53,7 @@ namespace lfs::vis::gui {
             return;
         }
 
+        render_needed_ = true;
         updateTheme();
     }
 
@@ -112,13 +113,13 @@ namespace lfs::vis::gui {
             overlay_text, overlay_text_dim, overlay_text_dim);
     }
 
-    void RmlViewportOverlay::updateTheme() {
+    bool RmlViewportOverlay::updateTheme() {
         if (!document_)
-            return;
+            return false;
 
         const std::size_t theme_signature = rml_theme::currentThemeSignature();
         if (has_theme_signature_ && theme_signature == last_theme_signature_)
-            return;
+            return false;
         last_theme_signature_ = theme_signature;
         has_theme_signature_ = true;
 
@@ -126,10 +127,24 @@ namespace lfs::vis::gui {
             base_rcss_ = rml_theme::loadBaseRCSS("rmlui/viewport_overlay.rcss");
 
         rml_theme::applyTheme(document_, base_rcss_, rml_theme::generateAllThemeMedia([this](const auto& th) { return generateThemeRCSS(th); }));
+        return true;
+    }
+
+    bool RmlViewportOverlay::shouldRunDocumentHooks(const bool force) const {
+        if (!lfs::python::has_python_hooks("viewport_overlay", "document"))
+            return false;
+        if (force || last_document_hook_run_ == std::chrono::steady_clock::time_point{})
+            return true;
+        return (std::chrono::steady_clock::now() - last_document_hook_run_) >=
+               kDocumentHookPollInterval;
     }
 
     void RmlViewportOverlay::setViewportBounds(glm::vec2 pos, glm::vec2 size,
                                                glm::vec2 screen_origin) {
+        if (vp_pos_ != pos || screen_origin_ != screen_origin)
+            mouse_pos_valid_ = false;
+        if (vp_size_ != size)
+            render_needed_ = true;
         vp_pos_ = pos;
         vp_size_ = size;
         screen_origin_ = screen_origin;
@@ -145,8 +160,21 @@ namespace lfs::vis::gui {
         ImGuiIO& io = ImGui::GetIO();
         float mx = io.MousePos.x - vp_pos_.x;
         float my = io.MousePos.y - vp_pos_.y;
-
-        rml_context_->ProcessMouseMove(static_cast<int>(mx), static_cast<int>(my), 0);
+        const int rml_mx = static_cast<int>(mx);
+        const int rml_my = static_cast<int>(my);
+        const bool was_inside = mouse_pos_valid_ &&
+                                last_mouse_x_ >= 0 && last_mouse_x_ < static_cast<int>(vp_size_.x) &&
+                                last_mouse_y_ >= 0 && last_mouse_y_ < static_cast<int>(vp_size_.y);
+        const bool is_inside = rml_mx >= 0 && rml_mx < static_cast<int>(vp_size_.x) &&
+                               rml_my >= 0 && rml_my < static_cast<int>(vp_size_.y);
+        if ((!mouse_pos_valid_ || rml_mx != last_mouse_x_ || rml_my != last_mouse_y_) &&
+            (was_inside || is_inside)) {
+            mouse_pos_valid_ = true;
+            last_mouse_x_ = rml_mx;
+            last_mouse_y_ = rml_my;
+            render_needed_ = true;
+            rml_context_->ProcessMouseMove(rml_mx, rml_my, 0);
+        }
 
         auto* hover = rml_context_->GetHoverElement();
         bool over_interactive = hover && hover->GetTagName() != "body" &&
@@ -157,14 +185,22 @@ namespace lfs::vis::gui {
             wants_input_ = true;
             io.WantCaptureMouse = true;
 
-            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                render_needed_ = true;
                 rml_context_->ProcessMouseButtonDown(0, 0);
-            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+            }
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+                render_needed_ = true;
                 rml_context_->ProcessMouseButtonUp(0, 0);
-            if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+            }
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                render_needed_ = true;
                 rml_context_->ProcessMouseButtonDown(1, 0);
-            if (ImGui::IsMouseReleased(ImGuiMouseButton_Right))
+            }
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+                render_needed_ = true;
                 rml_context_->ProcessMouseButtonUp(1, 0);
+            }
 
             RmlPanelHost::setFrameTooltip(resolveRmlTooltip(hover));
         }
@@ -227,42 +263,55 @@ namespace lfs::vis::gui {
             doc_registered_ = true;
         }
 
-        if (!rml_manager_->shouldDeferFboUpdate(fbo_)) {
-            updateTheme();
+        if (rml_manager_->shouldDeferFboUpdate(fbo_))
+            return;
 
-            if (lfs::python::has_python_hooks("viewport_overlay", "document")) {
-                lfs::python::invoke_python_document_hooks("viewport_overlay", "document", document_, true);
-                lfs::python::invoke_python_document_hooks("viewport_overlay", "document", document_, false);
-            }
-
-            auto* body = document_->GetElementById("overlay-body");
-            ensureBodyDataModelBound(body);
-
-            const int w = static_cast<int>(vp_size_.x);
-            const int h = static_cast<int>(vp_size_.y);
-
-            rml_context_->SetDimensions(Rml::Vector2i(w, h));
-            rml_context_->Update();
-
-            fbo_.ensure(w, h);
-            if (!fbo_.valid())
-                return;
-
-            auto* render = rml_manager_->getRenderInterface();
-            assert(render);
-            render->SetViewport(w, h);
-
-            GLint prev_fbo = 0;
-            fbo_.bind(&prev_fbo);
-            render->SetTargetFramebuffer(fbo_.fbo());
-
-            render->BeginFrame();
-            rml_context_->Render();
-            render->EndFrame();
-
-            render->SetTargetFramebuffer(0);
-            fbo_.unbind(prev_fbo);
+        const bool theme_changed = updateTheme();
+        const int w = static_cast<int>(vp_size_.x);
+        const int h = static_cast<int>(vp_size_.y);
+        const bool size_changed = (w != last_render_w_ || h != last_render_h_);
+        const bool run_document_hooks = shouldRunDocumentHooks(
+            theme_changed || size_changed || render_needed_ || animation_active_);
+        if (run_document_hooks) {
+            lfs::python::invoke_python_document_hooks("viewport_overlay", "document", document_, true);
+            lfs::python::invoke_python_document_hooks("viewport_overlay", "document", document_, false);
+            last_document_hook_run_ = std::chrono::steady_clock::now();
         }
+
+        auto* body = document_->GetElementById("overlay-body");
+        ensureBodyDataModelBound(body);
+
+        const bool needs_render = render_needed_ || animation_active_ || run_document_hooks ||
+                                  theme_changed || size_changed;
+        if (!needs_render)
+            return;
+
+        rml_context_->SetDimensions(Rml::Vector2i(w, h));
+        rml_context_->Update();
+
+        fbo_.ensure(w, h);
+        if (!fbo_.valid())
+            return;
+
+        auto* render = rml_manager_->getRenderInterface();
+        assert(render);
+        render->SetViewport(w, h);
+
+        GLint prev_fbo = 0;
+        fbo_.bind(&prev_fbo);
+        render->SetTargetFramebuffer(fbo_.fbo());
+
+        render->BeginFrame();
+        rml_context_->Render();
+        render->EndFrame();
+
+        render->SetTargetFramebuffer(0);
+        fbo_.unbind(prev_fbo);
+
+        animation_active_ = (rml_context_->GetNextUpdateDelay() == 0);
+        render_needed_ = false;
+        last_render_w_ = w;
+        last_render_h_ = h;
     }
 
     void RmlViewportOverlay::compositeToScreen(const int screen_w, const int screen_h) const {

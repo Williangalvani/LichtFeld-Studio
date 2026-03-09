@@ -88,6 +88,7 @@ namespace lfs::vis::gui {
         float clampScrollTop(float scroll_top) const;
         void restoreScrollTop(float scroll_top);
         void resolveDirectRenderHeight(float requested_h, int& ph, float& display_h) const;
+        bool updateContextLayout(int pw, int ph);
         void renderIfDirty(int pw, int ph, float& display_h);
         void compositeDirectToScreen(float x, float y, float w, float h) const;
 

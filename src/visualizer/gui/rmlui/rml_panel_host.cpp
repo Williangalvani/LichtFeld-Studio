@@ -484,9 +484,8 @@ namespace lfs::vis::gui {
             return;
 
         const float saved_scroll = scroll_el_ ? scroll_el_->GetScrollTop() : 0.0f;
-
-        rml_context_->SetDimensions(Rml::Vector2i(pw, ph));
-        rml_context_->Update();
+        if (!updateContextLayout(pw, ph))
+            return;
 
         restoreScrollTop(saved_scroll);
 
@@ -498,6 +497,18 @@ namespace lfs::vis::gui {
             if (content_el_)
                 last_content_el_height_ = content_el_->GetOffsetHeight();
         }
+    }
+
+    bool RmlPanelHost::updateContextLayout(const int pw, const int ph) {
+        const bool dims_changed = (pw != last_layout_w_ || ph != last_layout_h_);
+        if (dims_changed)
+            rml_context_->SetDimensions(Rml::Vector2i(pw, ph));
+        if (!dims_changed && !content_dirty_ && !render_needed_ && !animation_active_)
+            return false;
+        rml_context_->Update();
+        last_layout_w_ = pw;
+        last_layout_h_ = ph;
+        return true;
     }
 
     void RmlPanelHost::renderIfDirty(int pw, int ph, float& display_h) {
@@ -539,8 +550,13 @@ namespace lfs::vis::gui {
 
             float content_h = 0.0f;
             for (int pass = 0; pass < 3; ++pass) {
-                rml_context_->SetDimensions(Rml::Vector2i(pw, layout_h));
+                const bool dims_changed =
+                    (pw != last_layout_w_ || layout_h != last_layout_h_);
+                if (dims_changed)
+                    rml_context_->SetDimensions(Rml::Vector2i(pw, layout_h));
                 rml_context_->Update();
+                last_layout_w_ = pw;
+                last_layout_h_ = layout_h;
                 content_h = computeContentHeight();
 
                 const int measured = std::clamp(
@@ -572,17 +588,12 @@ namespace lfs::vis::gui {
             if (!fbo_.valid())
                 return;
 
-            rml_context_->SetDimensions(Rml::Vector2i(pw, ph));
-            rml_context_->Update();
-            last_layout_w_ = pw;
-            last_layout_h_ = ph;
+            if (pw != last_layout_w_ || ph != last_layout_h_)
+                updateContextLayout(pw, ph);
 
             restoreScrollTop(saved_scroll);
         } else {
-            rml_context_->SetDimensions(Rml::Vector2i(pw, ph));
-            rml_context_->Update();
-            last_layout_w_ = pw;
-            last_layout_h_ = ph;
+            updateContextLayout(pw, ph);
             restoreScrollTop(saved_scroll);
         }
 
@@ -845,19 +856,22 @@ namespace lfs::vis::gui {
                 hovered = false;
         }
 
-        if (hovered != last_hovered_) {
+        const bool hover_changed = (hovered != last_hovered_);
+        if (hover_changed) {
             last_hovered_ = hovered;
             had_input = true;
-            if (!hovered)
+            if (!hovered) {
+                last_forwarded_mx_ = -1;
+                last_forwarded_my_ = -1;
                 rml_context_->ProcessMouseLeave();
+            }
         }
 
         const int rml_mx = static_cast<int>(local_x);
         const int rml_my = static_cast<int>(local_y);
-        if (hovered &&
-            (rml_mx != last_forwarded_mx_ || rml_my != last_forwarded_my_)) {
-            last_forwarded_mx_ = rml_mx;
-            last_forwarded_my_ = rml_my;
+        const bool mouse_moved = hovered &&
+                                 (rml_mx != last_forwarded_mx_ || rml_my != last_forwarded_my_);
+        if (mouse_moved) {
             had_input = true;
         }
 
@@ -866,9 +880,12 @@ namespace lfs::vis::gui {
             input.mouse_wheel != 0.0f)
             had_input = true;
 
-        if (hovered) {
+        if (mouse_moved) {
+            last_forwarded_mx_ = rml_mx;
+            last_forwarded_my_ = rml_my;
             rml_context_->ProcessMouseMove(rml_mx, rml_my, 0);
-
+        }
+        if (hovered) {
             if (input.mouse_clicked[0])
                 rml_context_->ProcessMouseButtonDown(0, 0);
             if (input.mouse_released[0])

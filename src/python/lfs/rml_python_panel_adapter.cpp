@@ -9,6 +9,7 @@
 #include "python/gil.hpp"
 #include "python/python_runtime.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <mutex>
 #include <unordered_set>
@@ -56,6 +57,15 @@ namespace lfs::vis::gui {
         if (!bind_model_checked_) {
             has_bind_model_ = nb::hasattr(panel_instance_, "on_bind_model");
             bind_model_checked_ = true;
+        }
+        if (!has_update_interval_) {
+            has_update_interval_ = true;
+            try {
+                if (nb::hasattr(panel_instance_, "update_interval_ms"))
+                    update_interval_ms_ = std::max(0, nb::cast<int>(panel_instance_.attr("update_interval_ms")));
+            } catch (const std::exception& e) {
+                LOG_ERROR("RmlPanel update_interval_ms error: {}", e.what());
+            }
         }
     }
 
@@ -128,6 +138,10 @@ namespace lfs::vis::gui {
             ops.prepare_layout(host_, w, h);
     }
 
+    std::chrono::milliseconds RmlPythonPanelAdapter::updateInterval() const {
+        return std::chrono::milliseconds(update_interval_ms_);
+    }
+
     Rml::ElementDocument* RmlPythonPanelAdapter::prepareForRender(const PanelDrawContext* ctx) {
         auto* doc = ensureDocumentInitialized();
         if (!doc || !lfs::python::can_acquire_gil())
@@ -138,28 +152,38 @@ namespace lfs::vis::gui {
         if (frame_serial != 0 && last_prepare_frame_ == frame_serial)
             return doc;
 
-        const lfs::python::GilAcquire gil;
-        cachePythonCapabilities();
-
         bool pending_dirty = content_dirty_ || lfs::python::consume_document_dirty(doc);
-        auto py_doc = lfs::python::PyRmlDocument(doc);
+        const bool scene_changed = ctx && ctx->scene && ctx->scene_generation != last_scene_gen_;
+        const auto now = std::chrono::steady_clock::now();
+        cachePythonCapabilities();
+        const bool update_due =
+            next_update_at_ == std::chrono::steady_clock::time_point{} || now >= next_update_at_;
+        const bool should_run_update = scene_changed || pending_dirty || update_due;
 
-        if (ctx && ctx->scene && ctx->scene_generation != last_scene_gen_) {
-            try {
-                panel_instance_.attr("on_scene_changed")(py_doc);
-                pending_dirty = true;
-            } catch (const std::exception& e) {
-                LOG_ERROR("RmlPanel on_scene_changed error: {}", e.what());
+        if (should_run_update) {
+            const lfs::python::GilAcquire gil;
+            auto py_doc = lfs::python::PyRmlDocument(doc);
+
+            if (scene_changed) {
+                try {
+                    panel_instance_.attr("on_scene_changed")(py_doc);
+                    pending_dirty = true;
+                } catch (const std::exception& e) {
+                    LOG_ERROR("RmlPanel on_scene_changed error: {}", e.what());
+                }
+                last_scene_gen_ = ctx->scene_generation;
             }
-            last_scene_gen_ = ctx->scene_generation;
+
+            try {
+                nb::object result = panel_instance_.attr("on_update")(py_doc);
+                pending_dirty |= !result.is_none() && nb::cast<bool>(result);
+            } catch (const std::exception& e) {
+                LOG_ERROR("RmlPanel on_update error: {}", e.what());
+            }
+            pending_dirty |= lfs::python::consume_document_dirty(doc);
+            next_update_at_ = now + updateInterval();
         }
 
-        try {
-            nb::object result = panel_instance_.attr("on_update")(py_doc);
-            pending_dirty |= !result.is_none() && nb::cast<bool>(result);
-        } catch (const std::exception& e) {
-            LOG_ERROR("RmlPanel on_update error: {}", e.what());
-        }
         pending_dirty |= lfs::python::consume_document_dirty(doc);
 
         if (pending_dirty && ops.mark_content_dirty)
@@ -268,8 +292,6 @@ namespace lfs::vis::gui {
     void RmlPythonPanelAdapter::preloadDirect(float w, float h, const PanelDrawContext& ctx,
                                               float clip_y_min, float clip_y_max,
                                               const PanelInputState* input) {
-        syncDirectLayout(w, h);
-
         if (!prepareForRender(&ctx))
             return;
 

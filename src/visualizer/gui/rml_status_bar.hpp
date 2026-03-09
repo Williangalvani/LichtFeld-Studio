@@ -32,8 +32,8 @@ namespace lfs::vis::gui {
         void draw(const PanelDrawContext& ctx);
 
     private:
-        void updateContent(const PanelDrawContext& ctx);
-        void updateTheme();
+        bool updateContent(const PanelDrawContext& ctx, bool force_refresh);
+        bool updateTheme();
         std::string generateThemeRCSS(const lfs::vis::Theme& t) const;
         void setModelString(const char* name, std::string& field, std::string value);
         void setModelBool(const char* name, bool& field, bool value);
@@ -109,6 +109,18 @@ namespace lfs::vis::gui {
         };
 
         ModelState model_;
+        GpuMemoryInfo cached_gpu_mem_;
+        std::chrono::steady_clock::time_point next_refresh_at_{};
+        std::chrono::steady_clock::time_point next_gpu_refresh_at_{};
+        bool model_dirty_ = true;
+        bool animation_active_ = false;
+        int last_render_w_ = 0;
+        int last_render_h_ = 0;
+        int last_document_h_ = 0;
+        static constexpr auto kIdleRefreshInterval = std::chrono::milliseconds(200);
+        static constexpr auto kBusyRefreshInterval = std::chrono::milliseconds(100);
+        static constexpr auto kAnimatedRefreshInterval = std::chrono::milliseconds(16);
+        static constexpr auto kGpuRefreshInterval = std::chrono::milliseconds(250);
     };
 
 } // namespace lfs::vis::gui

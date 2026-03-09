@@ -7,6 +7,7 @@
 #include "gui/panel_layout.hpp"
 #include "gui/rmlui/rml_fbo.hpp"
 #include <RmlUi/Core/DataModelHandle.h>
+#include <chrono>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -89,13 +90,14 @@ namespace lfs::vis::gui {
         void updateLabels(const std::vector<std::string>& labels,
                           const std::vector<std::string>& idnames);
         void processInput(const PanelInputState& input);
+        void suspend();
         bool wantsInput() const { return wants_input_; }
         bool isOpen() const { return open_menu_index_ >= 0; }
         const RmlFBO& fbo() const { return fbo_; }
         float barHeight() const;
 
     private:
-        void updateTheme();
+        bool updateTheme();
         void rebuildLabels();
         void syncActiveLabelState();
         std::string generateThemeRCSS(const lfs::vis::Theme& t) const;
@@ -127,6 +129,13 @@ namespace lfs::vis::gui {
         int open_menu_index_ = -1;
         std::string open_menu_idname_;
         bool wants_input_ = false;
+        bool render_needed_ = true;
+        bool mouse_pos_valid_ = false;
+        int last_mouse_x_ = 0;
+        int last_mouse_y_ = 0;
+        int last_ctx_w_ = 0;
+        int last_ctx_h_ = 0;
+        int last_document_h_ = 0;
 
         float bar_height_ = 30.0f;
     };

@@ -184,9 +184,13 @@ namespace lfs::vis::gui {
         if (!speed_events_initialized_) {
             lfs::core::events::ui::SpeedChanged::when([this](const auto& e) {
                 speed_state_.showWasd(e.current_speed);
+                animation_active_ = true;
+                next_refresh_at_ = {};
             });
             lfs::core::events::ui::ZoomSpeedChanged::when([this](const auto& e) {
                 speed_state_.showZoom(e.zoom_speed);
+                animation_active_ = true;
+                next_refresh_at_ = {};
             });
             speed_events_initialized_ = true;
         }
@@ -228,13 +232,13 @@ namespace lfs::vis::gui {
             text, text_dim, surface_bright_half, primary);
     }
 
-    void RmlStatusBar::updateTheme() {
+    bool RmlStatusBar::updateTheme() {
         if (!document_)
-            return;
+            return false;
 
         const std::size_t theme_signature = rml_theme::currentThemeSignature();
         if (has_theme_signature_ && theme_signature == last_theme_signature_)
-            return;
+            return false;
         last_theme_signature_ = theme_signature;
         has_theme_signature_ = true;
 
@@ -242,6 +246,8 @@ namespace lfs::vis::gui {
             base_rcss_ = rml_theme::loadBaseRCSS("rmlui/statusbar.rcss");
 
         rml_theme::applyTheme(document_, base_rcss_, rml_theme::generateAllThemeMedia([this](const auto& th) { return generateThemeRCSS(th); }));
+        model_dirty_ = true;
+        return true;
     }
 
     void RmlStatusBar::setModelString(const char* name, std::string& field, std::string value) {
@@ -249,6 +255,7 @@ namespace lfs::vis::gui {
             return;
         field = std::move(value);
         model_handle_.DirtyVariable(name);
+        model_dirty_ = true;
     }
 
     void RmlStatusBar::setModelBool(const char* name, bool& field, bool value) {
@@ -256,11 +263,20 @@ namespace lfs::vis::gui {
             return;
         field = value;
         model_handle_.DirtyVariable(name);
+        model_dirty_ = true;
     }
 
-    void RmlStatusBar::updateContent(const PanelDrawContext& ctx) {
+    bool RmlStatusBar::updateContent(const PanelDrawContext& ctx, const bool force_refresh) {
         if (!document_)
-            return;
+            return false;
+
+        const auto now = std::chrono::steady_clock::now();
+        if (!force_refresh && next_refresh_at_ != std::chrono::steady_clock::time_point{} &&
+            now < next_refresh_at_) {
+            return false;
+        }
+
+        model_dirty_ = false;
 
         const auto& p = lfs::vis::theme().palette;
 
@@ -459,7 +475,12 @@ namespace lfs::vis::gui {
         }
 
         // Right section: GPU memory
-        auto mem = queryGpuMemory();
+        if (next_gpu_refresh_at_ == std::chrono::steady_clock::time_point{} ||
+            now >= next_gpu_refresh_at_) {
+            cached_gpu_mem_ = queryGpuMemory();
+            next_gpu_refresh_at_ = now + kGpuRefreshInterval;
+        }
+        const auto mem = cached_gpu_mem_;
         float app_gb = mem.process_used / 1e9f;
         float used_gb = mem.total_used / 1e9f;
         float total_gb = mem.total / 1e9f;
@@ -480,6 +501,12 @@ namespace lfs::vis::gui {
         setModelString("fps_label", model_.fps_label,
                        std::format(" {}", LOC(lichtfeld::Strings::Status::FPS)));
         setModelString("git_commit", model_.git_commit, GIT_COMMIT_HASH_SHORT);
+
+        animation_active_ = wasd_visible || zoom_visible;
+        next_refresh_at_ = now + (animation_active_ ? kAnimatedRefreshInterval
+                                                    : (ctx.is_training ? kBusyRefreshInterval
+                                                                       : kIdleRefreshInterval));
+        return model_dirty_;
     }
 
     void RmlStatusBar::draw(const PanelDrawContext& ctx) {
@@ -491,15 +518,34 @@ namespace lfs::vis::gui {
         if (avail_w <= 0 || avail_h <= 0)
             return;
 
-        if (!rml_manager_->shouldDeferFboUpdate(fbo_)) {
-            updateTheme();
-            updateContent(ctx);
+        const int w = static_cast<int>(avail_w);
+        const int h = static_cast<int>(avail_h);
+        const bool size_changed = (w != last_render_w_ || h != last_render_h_);
+        const bool had_pending_model_dirty = model_dirty_;
+        const bool theme_changed = updateTheme();
+        const auto now = std::chrono::steady_clock::now();
+        const bool refresh_due =
+            size_changed || theme_changed || had_pending_model_dirty || animation_active_ ||
+            next_refresh_at_ == std::chrono::steady_clock::time_point{} ||
+            now >= next_refresh_at_;
+        const bool content_changed = updateContent(ctx, refresh_due);
+        const bool needs_render = size_changed || theme_changed || had_pending_model_dirty ||
+                                  content_changed ||
+                                  (animation_active_ && refresh_due);
+        if (rml_manager_->shouldDeferFboUpdate(fbo_)) {
+            if (needs_render)
+                model_dirty_ = true;
+            if (fbo_.valid())
+                fbo_.blitAsImage(avail_w, avail_h);
+            return;
+        }
 
-            const int w = static_cast<int>(avail_w);
-            const int h = static_cast<int>(avail_h);
-
+        if (needs_render) {
             rml_context_->SetDimensions(Rml::Vector2i(w, h));
-            document_->SetProperty("height", std::format("{}px", h));
+            if (h != last_document_h_) {
+                document_->SetProperty("height", std::format("{}px", h));
+                last_document_h_ = h;
+            }
             rml_context_->Update();
 
             fbo_.ensure(w, h);
@@ -520,6 +566,10 @@ namespace lfs::vis::gui {
 
             render->SetTargetFramebuffer(0);
             fbo_.unbind(prev_fbo);
+
+            animation_active_ = animation_active_ || (rml_context_->GetNextUpdateDelay() == 0);
+            last_render_w_ = w;
+            last_render_h_ = h;
         }
 
         if (fbo_.valid())

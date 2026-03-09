@@ -37,6 +37,7 @@ class ExportPanel(RmlPanel):
     rml_template = "rmlui/export_panel.rml"
     rml_height_mode = "content"
     initial_width = 320
+    update_interval_ms = 100
 
     def __init__(self):
         self._format = ExportFormat.PLY

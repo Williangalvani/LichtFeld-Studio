@@ -132,6 +132,7 @@ class RmlPanel:
     space: str = "SCENE_HEADER"
     order: int = 0
     rml_template: str = ""
+    update_interval_ms: int = 100
 
     @classmethod
     def _class_id(cls) -> str:
@@ -150,7 +151,7 @@ class RmlPanel:
                 "click", lambda _ev: lf.ui.set_panel_enabled(self.idname, False))
 
     def on_update(self, doc):
-        """Called each frame after the host renders."""
+        """Called periodically while the panel is visible."""
         pass
 
     def on_scene_changed(self, doc):
@@ -174,4 +175,3 @@ class Menu:
 
     def draw(self, layout):
         pass
-

@@ -19,6 +19,7 @@ class ScriptsPanel(RmlPanel):
     rml_template = "rmlui/scripts_panel.rml"
     rml_height_mode = "content"
     initial_width = 520
+    update_interval_ms = 200
 
     def __init__(self):
         self._handle = None

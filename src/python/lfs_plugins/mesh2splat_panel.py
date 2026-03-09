@@ -21,6 +21,7 @@ class Mesh2SplatPanel(RmlPanel):
     rml_template = "rmlui/mesh2splat_panel.rml"
     rml_height_mode = "content"
     initial_width = 420
+    update_interval_ms = 100
 
     _RESOLUTION_OPTIONS = (128, 256, 512, 1024, 2048, 4096)
     _MIN_RESOLUTION = 16

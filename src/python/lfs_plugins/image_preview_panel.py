@@ -49,6 +49,7 @@ class ImagePreviewPanel(RmlPanel):
     rml_template = "rmlui/image_preview.rml"
     initial_width = 900
     initial_height = 600
+    update_interval_ms = 16
 
     def __init__(self):
         global _instance

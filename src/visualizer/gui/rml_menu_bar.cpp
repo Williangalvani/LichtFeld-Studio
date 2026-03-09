@@ -243,6 +243,7 @@ namespace lfs::vis::gui {
         dropdown_overlay_ = document_->GetElementById("dropdown-overlay");
         dropdown_container_ = document_->GetElementById("dropdown-container");
 
+        render_needed_ = true;
         updateTheme();
     }
 
@@ -261,6 +262,16 @@ namespace lfs::vis::gui {
         dropdown_overlay_ = nullptr;
     }
 
+    void RmlMenuBar::suspend() {
+        wants_input_ = false;
+        mouse_pos_valid_ = false;
+        last_mouse_x_ = 0;
+        last_mouse_y_ = 0;
+
+        if (open_menu_index_ >= 0)
+            closeDropdown();
+    }
+
     void RmlMenuBar::updateLabels(const std::vector<std::string>& labels,
                                   const std::vector<std::string>& idnames) {
         assert(labels.size() == idnames.size());
@@ -268,6 +279,7 @@ namespace lfs::vis::gui {
             return;
         current_labels_ = labels;
         current_idnames_ = idnames;
+        render_needed_ = true;
 
         if (open_menu_index_ >= static_cast<int>(current_idnames_.size())) {
             closeDropdown();
@@ -287,6 +299,7 @@ namespace lfs::vis::gui {
             });
         }
         menu_model_.DirtyVariable("menu_labels");
+        render_needed_ = true;
     }
 
     void RmlMenuBar::syncActiveLabelState() {
@@ -298,6 +311,7 @@ namespace lfs::vis::gui {
         for (size_t i = 0; i < menu_labels_.size(); ++i)
             menu_labels_[i].active = static_cast<int>(i) == active_index_;
         menu_model_.DirtyVariable("menu_labels");
+        render_needed_ = true;
     }
 
     void RmlMenuBar::processInput(const PanelInputState& input) {
@@ -308,10 +322,26 @@ namespace lfs::vis::gui {
 
         const float mx = input.mouse_x - input.screen_x;
         const float my = input.mouse_y - input.screen_y;
-
-        rml_context_->ProcessMouseMove(static_cast<int>(mx), static_cast<int>(my), 0);
-
         const bool is_open = open_menu_index_ >= 0;
+        const int ctx_w = input.screen_w;
+        const int ctx_h = is_open
+                              ? input.screen_h
+                              : static_cast<int>(bar_height_ * rml_manager_->getDpRatio());
+        const int rml_mx = static_cast<int>(mx);
+        const int rml_my = static_cast<int>(my);
+        const bool was_in_context = mouse_pos_valid_ &&
+                                    last_mouse_x_ >= 0 && last_mouse_x_ < ctx_w &&
+                                    last_mouse_y_ >= 0 && last_mouse_y_ < ctx_h;
+        const bool is_in_context = rml_mx >= 0 && rml_mx < ctx_w &&
+                                   rml_my >= 0 && rml_my < ctx_h;
+        if ((!mouse_pos_valid_ || rml_mx != last_mouse_x_ || rml_my != last_mouse_y_) &&
+            (is_open || was_in_context || is_in_context)) {
+            mouse_pos_valid_ = true;
+            last_mouse_x_ = rml_mx;
+            last_mouse_y_ = rml_my;
+            render_needed_ = true;
+            rml_context_->ProcessMouseMove(rml_mx, rml_my, 0);
+        }
 
         const int count = menu_items_->GetNumChildren();
         int hovered_label = -1;
@@ -414,6 +444,7 @@ namespace lfs::vis::gui {
         dropdown_items_ = buildRootMenuItems(content.items);
         rebuildDropdownDOM();
         syncActiveLabelState();
+        render_needed_ = true;
     }
 
     void RmlMenuBar::closeDropdown() {
@@ -430,6 +461,7 @@ namespace lfs::vis::gui {
 
         syncActiveLabelState();
         wants_input_ = false;
+        render_needed_ = true;
     }
 
     void RmlMenuBar::rebuildDropdownDOM() {
@@ -449,6 +481,7 @@ namespace lfs::vis::gui {
         dropdown_container_->SetProperty("top", std::format("{}px", label_offset.y + label_size.y));
         dropdown_container_->SetClass("visible", true);
         dropdown_overlay_->SetClass("visible", true);
+        render_needed_ = true;
     }
 
     std::string RmlMenuBar::generateThemeRCSS(const lfs::vis::Theme& t) const {
@@ -480,13 +513,13 @@ namespace lfs::vis::gui {
             hover, text_dim, text_dim, popup_border);
     }
 
-    void RmlMenuBar::updateTheme() {
+    bool RmlMenuBar::updateTheme() {
         if (!document_)
-            return;
+            return false;
 
         const std::size_t theme_signature = rml_theme::currentThemeSignature();
         if (has_theme_signature_ && theme_signature == last_theme_signature_)
-            return;
+            return false;
         last_theme_signature_ = theme_signature;
         has_theme_signature_ = true;
 
@@ -494,6 +527,7 @@ namespace lfs::vis::gui {
             base_rcss_ = rml_theme::loadBaseRCSS("rmlui/menubar.rcss");
 
         rml_theme::applyTheme(document_, base_rcss_, rml_theme::generateAllThemeMedia([this](const auto& th) { return generateThemeRCSS(th); }));
+        return true;
     }
 
     void RmlMenuBar::draw(int screen_w, int screen_h) {
@@ -501,7 +535,7 @@ namespace lfs::vis::gui {
             return;
         if (rml_manager_->shouldDeferFboUpdate(fbo_))
             return;
-        updateTheme();
+        const bool theme_changed = updateTheme();
 
         const float dp_ratio = rml_manager_->getDpRatio();
         const int bar_h = static_cast<int>(bar_height_ * dp_ratio);
@@ -515,8 +549,16 @@ namespace lfs::vis::gui {
             ctx_h = bar_h;
         }
 
+        const bool size_changed = (ctx_w != last_ctx_w_ || ctx_h != last_ctx_h_);
+        const bool needs_render = render_needed_ || theme_changed || size_changed;
+        if (!needs_render)
+            return;
+
         rml_context_->SetDimensions(Rml::Vector2i(ctx_w, ctx_h));
-        document_->SetProperty("height", std::format("{}px", ctx_h));
+        if (ctx_h != last_document_h_) {
+            document_->SetProperty("height", std::format("{}px", ctx_h));
+            last_document_h_ = ctx_h;
+        }
         rml_context_->Update();
 
         fbo_.ensure(ctx_w, ctx_h);
@@ -537,6 +579,10 @@ namespace lfs::vis::gui {
 
         render->SetTargetFramebuffer(0);
         fbo_.unbind(prev_fbo);
+
+        last_ctx_w_ = ctx_w;
+        last_ctx_h_ = ctx_h;
+        render_needed_ = false;
     }
 
 } // namespace lfs::vis::gui

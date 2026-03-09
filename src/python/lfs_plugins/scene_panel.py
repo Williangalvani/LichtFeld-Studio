@@ -115,6 +115,7 @@ class ScenePanel(RmlPanel):
     space = "SCENE_HEADER"
     order = 0
     rml_template = "rmlui/scene_tree.rml"
+    update_interval_ms = 16
 
     def __init__(self):
         self.doc = None

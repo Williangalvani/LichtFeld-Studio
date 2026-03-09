@@ -33,6 +33,8 @@ def open_resume_checkpoint_panel(checkpoint_path: str) -> bool:
 class _ImportDialogPanel(RmlPanel):
     """Common behavior for retained import dialogs."""
 
+    update_interval_ms = 200
+
     def on_load(self, doc):
         super().on_load(doc)
         doc.add_event_listener("keydown", self._on_keydown)
