@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <memory>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 

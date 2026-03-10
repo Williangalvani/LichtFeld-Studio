@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "gui/rmlui/rmlui_system_interface.hpp"
-#include "core/logger.hpp"
 #include "core/event_bridge/localization_manager.hpp"
+#include "core/logger.hpp"
 
 #include <SDL3/SDL_clipboard.h>
 #include <SDL3/SDL_keyboard.h>
