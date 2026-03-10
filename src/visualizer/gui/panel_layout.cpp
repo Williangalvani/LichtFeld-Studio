@@ -8,8 +8,8 @@
 #include "python/python_runtime.hpp"
 #include "theme/theme.hpp"
 #include "visualizer_impl.hpp"
-#include <imgui.h>
 #include <algorithm>
+#include <imgui.h>
 
 namespace lfs::vis::gui {
 
