@@ -21,7 +21,10 @@
 #include "training/training_setup.hpp"
 #include "visualizer/visualizer.hpp"
 
+#include "app/mcp_gui_tools.hpp"
 #include "io/video/video_encoder.hpp"
+#include "mcp/mcp_http_server.hpp"
+#include "mcp/mcp_tools.hpp"
 #include "python/runner.hpp"
 #include "visualizer/gui/panels/python_scripts_panel.hpp"
 #include "visualizer/gui/video_widget_interface.hpp"
@@ -277,7 +280,22 @@ namespace lfs::app {
                 }
             }
 
+            mcp::register_core_tools();
+            mcp::register_core_resources();
+            register_gui_scene_tools(viewer.get());
+            register_gui_scene_resources(viewer.get());
+
+            mcp::McpHttpServer mcp_http({.enable_resources = true});
+            viewer->setShutdownRequestedCallback([&mcp_http]() {
+                mcp_http.stop();
+            });
+            if (!mcp_http.start())
+                LOG_ERROR("Failed to start MCP HTTP server");
+
             viewer->run();
+
+            mcp_http.stop();
+
             viewer.reset();
 
             core::Tensor::shutdown_memory_pool();

@@ -46,6 +46,11 @@ namespace lfs::vis::gui::panels {
         terminal::TerminalWidget* getTerminal();
         terminal::TerminalWidget* getOutputTerminal();
         editor::PythonEditor* getEditor();
+        void setEditorText(const std::string& text);
+        void focusEditor();
+        [[nodiscard]] std::string getEditorText() const;
+        [[nodiscard]] std::string getEditorTextStripped() const;
+        [[nodiscard]] std::string getOutputText() const;
 
         // Tab selection (0 = Output, 1 = Terminal)
         int getActiveTab() const { return active_tab_; }

@@ -254,9 +254,7 @@ namespace lfs::vis {
 
         // Load through scene manager (it emits DatasetLoadCompleted event on success/failure)
         LOG_DEBUG("Passing dataset to scene manager with parameters");
-        scene_manager_->loadDataset(path, params_);
-
-        return {};
+        return scene_manager_->loadDataset(path, params_);
     }
 
     void DataLoadingService::clearScene() {

@@ -12,6 +12,24 @@
 
 namespace lfs::vis::op {
 
+    namespace {
+
+        class ScopedUnlock {
+        public:
+            explicit ScopedUnlock(std::unique_lock<std::mutex>& lock) : lock_(lock) {
+                lock_.unlock();
+            }
+
+            ~ScopedUnlock() {
+                lock_.lock();
+            }
+
+        private:
+            std::unique_lock<std::mutex>& lock_;
+        };
+
+    } // namespace
+
     OperatorRegistry& OperatorRegistry::instance() {
         static OperatorRegistry registry;
         return registry;
@@ -152,7 +170,23 @@ namespace lfs::vis::op {
         return it != python_operators_.end() ? &it->second.descriptor : nullptr;
     }
 
-    bool OperatorRegistry::pollImpl(const RegisteredOperator& reg) const {
+    bool OperatorRegistry::pollImpl(const RegisteredOperator& reg, const OperatorProperties* props) const {
+        if (props != nullptr) {
+            if (reg.poll_fn) {
+                return reg.poll_fn();
+            }
+
+            if (reg.factory) {
+                auto op = reg.factory();
+                if (op) {
+                    auto local_ctx = makeContext();
+                    return local_ctx && op->poll(*local_ctx, props);
+                }
+            }
+
+            return false;
+        }
+
         const auto& ctx = python::context();
         const uint64_t gen = ctx.scene_generation;
         const bool has_sel = scene_manager_ && scene_manager_->hasSelectedNode();
@@ -188,7 +222,7 @@ namespace lfs::vis::op {
             auto op = reg.factory();
             if (op) {
                 auto local_ctx = makeContext();
-                result = local_ctx && op->poll(*local_ctx);
+                result = local_ctx && op->poll(*local_ctx, nullptr);
             }
         }
 
@@ -251,21 +285,27 @@ namespace lfs::vis::op {
         });
     }
 
-    OperatorReturnValue OperatorRegistry::invokeImpl(RegisteredOperator& reg, const std::string& id,
+    OperatorReturnValue OperatorRegistry::invokeImpl(std::unique_lock<std::mutex>& lock,
+                                                     RegisteredOperator& reg, const std::string& id,
                                                      OperatorProperties* props) {
         OperatorProperties local_props;
         OperatorProperties& props_ref = props ? *props : local_props;
 
-        if (reg.invoke_fn) {
-            if (reg.poll_fn && !reg.poll_fn()) {
+        const auto poll_fn = reg.poll_fn;
+        const auto invoke_fn = reg.invoke_fn;
+        const auto modal_fn = reg.modal_fn;
+
+        if (invoke_fn) {
+            if (poll_fn && !poll_fn()) {
                 return OperatorReturnValue::cancelled();
             }
 
-            mutex_.unlock();
-            const OperatorResult result = reg.invoke_fn(props_ref);
-            mutex_.lock();
+            const OperatorResult result = [&]() {
+                ScopedUnlock unlock(lock);
+                return invoke_fn(props_ref);
+            }();
 
-            if (result == OperatorResult::RUNNING_MODAL && reg.modal_fn) {
+            if (result == OperatorResult::RUNNING_MODAL && modal_fn) {
                 if (!active_modal_id_.empty() && active_modal_id_ != id) {
                     LOG_WARN("Modal operator '{}' replacing active modal '{}'", id, active_modal_id_);
                 } else if (active_modal_) {
@@ -295,13 +335,14 @@ namespace lfs::vis::op {
             return OperatorReturnValue::cancelled();
         }
 
-        if (!op->poll(*ctx)) {
+        if (!op->poll(*ctx, &props_ref)) {
             return OperatorReturnValue::cancelled();
         }
 
-        mutex_.unlock();
-        const OperatorResult result = op->invoke(*ctx, props_ref);
-        mutex_.lock();
+        const OperatorResult result = [&]() {
+            ScopedUnlock unlock(lock);
+            return op->invoke(*ctx, props_ref);
+        }();
 
         if (result == OperatorResult::RUNNING_MODAL) {
             if (active_modal_) {
@@ -329,7 +370,7 @@ namespace lfs::vis::op {
             return OperatorReturnValue::cancelled();
         }
 
-        auto result = invokeImpl(builtins_[idx], to_string(op), props);
+        auto result = invokeImpl(lock, builtins_[idx], to_string(op), props);
 
         if (result.status == OperatorResult::RUNNING_MODAL && active_modal_) {
             active_modal_builtin_ = op;
@@ -356,7 +397,7 @@ namespace lfs::vis::op {
             return OperatorReturnValue::cancelled();
         }
 
-        return invokeImpl(it->second, class_id, props);
+        return invokeImpl(lock, it->second, class_id, props);
     }
 
     bool OperatorRegistry::hasModalOperator() const {
@@ -373,30 +414,56 @@ namespace lfs::vis::op {
         return ModalState::IDLE;
     }
 
+    std::string OperatorRegistry::activeModalId() const {
+        std::lock_guard lock(mutex_);
+        if (!active_modal_id_.empty()) {
+            return active_modal_id_;
+        }
+        if (active_modal_builtin_.has_value()) {
+            const auto idx = static_cast<size_t>(*active_modal_builtin_);
+            if (idx < builtins_.size() && builtins_[idx].is_registered) {
+                return builtins_[idx].descriptor.id();
+            }
+        }
+        return {};
+    }
+
+    bool OperatorRegistry::canLockMutexForTest() const {
+        if (!mutex_.try_lock()) {
+            return false;
+        }
+        mutex_.unlock();
+        return true;
+    }
+
     OperatorResult OperatorRegistry::dispatchModalEvent(const ModalEvent& event) {
         std::unique_lock lock(mutex_);
 
         if (!active_modal_id_.empty()) {
-            auto it = python_operators_.find(active_modal_id_);
+            const std::string modal_id = active_modal_id_;
+            auto it = python_operators_.find(modal_id);
             if (it == python_operators_.end() || !it->second.modal_fn) {
                 active_modal_id_.clear();
                 return OperatorResult::CANCELLED;
             }
 
-            auto& reg = it->second;
+            const auto modal_fn = it->second.modal_fn;
+            const auto cancel_fn = it->second.cancel_fn;
             auto props = modal_props_;
             lock.unlock();
 
-            const OperatorResult result = reg.modal_fn(event, props);
+            const OperatorResult result = modal_fn(event, props);
 
             lock.lock();
 
             if (result == OperatorResult::FINISHED || result == OperatorResult::CANCELLED) {
-                if (result == OperatorResult::CANCELLED && reg.cancel_fn) {
-                    reg.cancel_fn();
+                if (result == OperatorResult::CANCELLED && cancel_fn && active_modal_id_ == modal_id) {
+                    cancel_fn();
                 }
-                active_modal_id_.clear();
-            } else {
+                if (active_modal_id_ == modal_id) {
+                    active_modal_id_.clear();
+                }
+            } else if (active_modal_id_ == modal_id) {
                 modal_props_ = props;
             }
 

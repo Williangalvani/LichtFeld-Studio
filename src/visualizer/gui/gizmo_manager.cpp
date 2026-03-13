@@ -26,6 +26,7 @@
 #include "tools/brush_tool.hpp"
 #include "tools/selection_tool.hpp"
 #include "tools/unified_tool_registry.hpp"
+#include "visualizer/gui_capabilities.hpp"
 #include "visualizer_impl.hpp"
 #include <SDL3/SDL.h>
 #include <array>
@@ -225,16 +226,20 @@ namespace lfs::vis::gui {
             if (!sm)
                 return;
 
-            const core::NodeId cropbox_id = sm->getSelectedNodeCropBoxId();
-            if (cropbox_id == core::NULL_NODE)
+            auto cropbox_id = cap::resolveCropBoxId(*sm, std::nullopt);
+            if (!cropbox_id)
                 return;
 
-            auto* node = sm->getScene().getMutableNode(sm->getScene().getNodeById(cropbox_id)->name);
+            const auto* node = sm->getScene().getNodeById(*cropbox_id);
             if (!node || !node->cropbox)
                 return;
 
-            node->cropbox->inverse = !node->cropbox->inverse;
-            sm->getScene().invalidateCache();
+            cap::CropBoxUpdate update;
+            update.has_inverse = true;
+            update.inverse = !node->cropbox->inverse;
+            if (auto result = cap::updateCropBox(*sm, viewer_->getRenderingManager(), *cropbox_id, update); !result) {
+                LOG_WARN("Failed to toggle crop inverse: {}", result.error());
+            }
         });
 
         cmd::CycleSelectionVisualization::when([this](const auto&) {
@@ -1421,13 +1426,29 @@ namespace lfs::vis::gui {
         const auto selected = sm->getSelectedNodeNames();
         for (const auto& name : selected) {
             const auto* node = sm->getScene().getNode(name);
-            if (!node || node->type != core::NodeType::SPLAT)
+            if (!node)
                 continue;
 
-            if (is_cropbox)
-                lfs::core::events::cmd::AddCropBox{.node_name = name}.emit();
-            else
+            if (is_cropbox) {
+                if (node->type != core::NodeType::SPLAT && node->type != core::NodeType::POINTCLOUD)
+                    continue;
+
+                auto cropbox_id = cap::ensureCropBox(*sm, viewer_->getRenderingManager(), node->id);
+                if (!cropbox_id) {
+                    LOG_WARN("Failed to add cropbox for '{}': {}", name, cropbox_id.error());
+                    continue;
+                }
+
+                if (const auto* cropbox = sm->getScene().getNodeById(*cropbox_id)) {
+                    if (auto result = cap::selectNode(*sm, cropbox->name); !result) {
+                        LOG_WARN("Failed to select cropbox '{}': {}", cropbox->name, result.error());
+                    }
+                }
+            } else {
+                if (node->type != core::NodeType::SPLAT)
+                    continue;
                 lfs::core::events::cmd::AddCropEllipsoid{.node_name = name}.emit();
+            }
 
             sm->syncCropBoxToRenderSettings();
             current_operation_ = ImGuizmo::TRANSLATE;
@@ -1453,22 +1474,44 @@ namespace lfs::vis::gui {
             else
                 cmd::ApplyEllipsoid{}.emit();
         } else if (action_id == "crop.fit") {
-            if (is_cropbox)
-                cmd::FitCropBoxToScene{.use_percentile = false}.emit();
-            else
+            if (is_cropbox) {
+                auto cropbox_id = cap::resolveCropBoxId(*sm, std::nullopt);
+                if (!cropbox_id)
+                    return;
+                if (auto result = cap::fitCropBoxToParent(*sm, viewer_->getRenderingManager(), *cropbox_id, false);
+                    !result) {
+                    LOG_WARN("Failed to fit cropbox: {}", result.error());
+                }
+            } else {
                 cmd::FitEllipsoidToScene{.use_percentile = false}.emit();
+            }
         } else if (action_id == "crop.fit_trim") {
-            if (is_cropbox)
-                cmd::FitCropBoxToScene{.use_percentile = true}.emit();
-            else
+            if (is_cropbox) {
+                auto cropbox_id = cap::resolveCropBoxId(*sm, std::nullopt);
+                if (!cropbox_id)
+                    return;
+                if (auto result = cap::fitCropBoxToParent(*sm, viewer_->getRenderingManager(), *cropbox_id, true);
+                    !result) {
+                    LOG_WARN("Failed to trim-fit cropbox: {}", result.error());
+                }
+            } else {
                 cmd::FitEllipsoidToScene{.use_percentile = true}.emit();
+            }
         } else if (action_id == "crop.invert") {
+            if (!is_cropbox)
+                return;
             cmd::ToggleCropInverse{}.emit();
         } else if (action_id == "crop.reset") {
-            if (is_cropbox)
-                cmd::ResetCropBox{}.emit();
-            else
+            if (is_cropbox) {
+                auto cropbox_id = cap::resolveCropBoxId(*sm, std::nullopt);
+                if (!cropbox_id)
+                    return;
+                if (auto result = cap::resetCropBox(*sm, viewer_->getRenderingManager(), *cropbox_id); !result) {
+                    LOG_WARN("Failed to reset cropbox: {}", result.error());
+                }
+            } else {
                 cmd::ResetEllipsoid{}.emit();
+            }
         } else if (action_id == "crop.delete") {
             if (!sm)
                 return;

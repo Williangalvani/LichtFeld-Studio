@@ -18,6 +18,7 @@
 #include "operator/ops/align_ops.hpp"
 #include "operator/ops/brush_ops.hpp"
 #include "operator/ops/edit_ops.hpp"
+#include "operator/ops/scene_ops.hpp"
 #include "operator/ops/selection_ops.hpp"
 #include "operator/ops/transform_ops.hpp"
 #include "python/python_runtime.hpp"
@@ -34,6 +35,7 @@
 #include <SDL3/SDL_events.h>
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <stdexcept>
 #ifdef WIN32
@@ -44,12 +46,87 @@ namespace lfs::vis {
 
     using namespace lfs::core::events;
 
+    namespace {
+
+        constexpr float kMinSetViewVectorLength = 1e-6f;
+
+        bool isFiniteVec3(const glm::vec3& v) {
+            return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+        }
+
+        glm::vec3 chooseFallbackUp(const glm::vec3& forward) {
+            constexpr glm::vec3 kCandidates[] = {
+                {0.0f, 1.0f, 0.0f},
+                {0.0f, 0.0f, 1.0f},
+                {1.0f, 0.0f, 0.0f},
+            };
+
+            glm::vec3 best = kCandidates[0];
+            float best_alignment = std::abs(glm::dot(forward, best));
+            for (const auto& candidate : kCandidates) {
+                const float alignment = std::abs(glm::dot(forward, candidate));
+                if (alignment < best_alignment) {
+                    best = candidate;
+                    best_alignment = alignment;
+                }
+            }
+            return best;
+        }
+
+        std::optional<glm::mat3> buildValidatedViewRotation(const glm::vec3& eye,
+                                                            const glm::vec3& target,
+                                                            const glm::vec3& requested_up) {
+            if (!isFiniteVec3(eye) || !isFiniteVec3(target) || !isFiniteVec3(requested_up)) {
+                return std::nullopt;
+            }
+
+            const glm::vec3 view = target - eye;
+            const float view_length = glm::length(view);
+            if (view_length <= kMinSetViewVectorLength) {
+                return std::nullopt;
+            }
+
+            const glm::vec3 forward = view / view_length;
+
+            glm::vec3 up = requested_up;
+            const float up_length = glm::length(up);
+            if (up_length <= kMinSetViewVectorLength) {
+                up = chooseFallbackUp(forward);
+            } else {
+                up /= up_length;
+            }
+
+            glm::vec3 right = glm::cross(up, forward);
+            float right_length = glm::length(right);
+            if (right_length <= kMinSetViewVectorLength) {
+                up = chooseFallbackUp(forward);
+                right = glm::cross(up, forward);
+                right_length = glm::length(right);
+                if (right_length <= kMinSetViewVectorLength) {
+                    return std::nullopt;
+                }
+            }
+            right /= right_length;
+
+            glm::vec3 camera_up = glm::cross(forward, right);
+            const float camera_up_length = glm::length(camera_up);
+            if (camera_up_length <= kMinSetViewVectorLength) {
+                return std::nullopt;
+            }
+            camera_up /= camera_up_length;
+
+            return glm::mat3(right, camera_up, forward);
+        }
+
+    } // namespace
+
     VisualizerImpl::VisualizerImpl(const ViewerOptions& options)
         : options_(options),
           viewport_(options.width, options.height),
           window_manager_(std::make_unique<WindowManager>(options.title, options.width, options.height,
                                                           options.monitor_x, options.monitor_y,
                                                           options.monitor_width, options.monitor_height)) {
+        viewer_thread_id_ = std::this_thread::get_id();
 
         LOG_DEBUG("Creating visualizer with window size {}x{}", options.width, options.height);
 
@@ -99,6 +176,7 @@ namespace lfs::vis {
         op::registerSelectionOperators();
         op::registerBrushOperators();
         op::registerEditOperators();
+        op::registerSceneOperators();
 
         setupPythonBridge();
         setupEventHandlers();
@@ -112,14 +190,13 @@ namespace lfs::vis {
 
         // Clear operator system
         op::unregisterEditOperators();
+        op::unregisterSceneOperators();
         op::unregisterBrushOperators();
         op::unregisterSelectionOperators();
         op::unregisterAlignOperators();
         op::unregisterTransformOperators();
         op::operators().clear();
 
-        if (selection_server_)
-            selection_server_->stop();
         callback_cleanup_.clear();
         trainer_manager_.reset();
         brush_tool_.reset();
@@ -481,12 +558,11 @@ namespace lfs::vis {
         callback_cleanup_.add([] { python::set_export_callback(nullptr); });
     }
 
-    void VisualizerImpl::setupIpcServer() {
-        if (selection_server_)
+    void VisualizerImpl::setupViewContextBridge() {
+        if (view_context_bridge_initialized_)
             return;
 
-        selection_server_ = std::make_unique<SelectionServer>();
-        selection_server_->start();
+        view_context_bridge_initialized_ = true;
         if (rendering_manager_) {
             rendering_manager_->setOutputScreenPositions(true);
         }
@@ -518,11 +594,13 @@ namespace lfs::vis {
             const glm::vec3 target(params.target[0], params.target[1], params.target[2]);
             const glm::vec3 up(params.up[0], params.up[1], params.up[2]);
 
-            const glm::vec3 forward = glm::normalize(target - eye);
-            const glm::vec3 right = glm::normalize(glm::cross(up, forward));
-            const glm::vec3 cam_up = glm::cross(forward, right);
+            const auto rotation = buildValidatedViewRotation(eye, target, up);
+            if (!rotation) {
+                LOG_WARN("Ignoring set_view request with degenerate or non-finite eye/target/up vectors");
+                return;
+            }
 
-            viewport_.camera.R = glm::mat3(right, cam_up, forward);
+            viewport_.camera.R = *rotation;
             viewport_.camera.t = eye;
             viewport_.camera.setPivot(target);
 
@@ -562,24 +640,6 @@ namespace lfs::vis {
                 rendering_manager_->updateSettings(s);
             });
         callback_cleanup_.add([] { vis::set_render_settings_callbacks(nullptr, nullptr); });
-
-        selection_server_->setInvokeCapabilityCallback(
-            [this](const std::string& name, const std::string& args) -> CapabilityInvokeResult {
-                std::mutex mtx;
-                std::condition_variable cv;
-                CapabilityInvokeResult result;
-                bool done = false;
-
-                {
-                    std::lock_guard lock(capability_request_mutex_);
-                    pending_capability_request_ = CapabilityRequest{name, args, &result, &mtx, &cv, &done};
-                }
-
-                std::unique_lock lock(mtx);
-                cv.wait(lock, [&done] { return done; });
-
-                return result;
-            });
     }
 
     void VisualizerImpl::setupComponentConnections() {
@@ -589,6 +649,31 @@ namespace lfs::vis {
         main_loop_->setRenderCallback([this]() { render(); });
         main_loop_->setShutdownCallback([this]() { shutdown(); });
         main_loop_->setShouldCloseCallback([this]() { return allowclose(); });
+    }
+
+    void VisualizerImpl::beginShutdown([[maybe_unused]] const std::string_view reason) {
+        std::vector<WorkItem> pending_work;
+        {
+            std::lock_guard lock(work_queue_mutex_);
+            if (shutdown_started_)
+                return;
+            shutdown_started_ = true;
+            accepting_work_ = false;
+            pending_work.swap(work_queue_);
+        }
+
+        for (auto& work : pending_work) {
+            if (work.cancel)
+                work.cancel();
+        }
+
+        std::function<void()> shutdown_callback;
+        {
+            std::lock_guard lock(shutdown_callback_mutex_);
+            shutdown_callback = shutdown_requested_callback_;
+        }
+        if (shutdown_callback)
+            shutdown_callback();
     }
 
     void VisualizerImpl::setupEventHandlers() {
@@ -814,7 +899,7 @@ namespace lfs::vis {
             initializeTools();
         }
 
-        setupIpcServer();
+        setupViewContextBridge();
 
         if (scene_manager_)
             scene_manager_->initSelectionService();
@@ -831,25 +916,16 @@ namespace lfs::vis {
     void VisualizerImpl::update() {
         window_manager_->updateWindowSize();
 
-        // Process MCP selection commands from the IPC server
-        if (selection_server_) {
-            selection_server_->process_pending_commands();
-        }
-
-        // Process pending capability request from IPC thread
+        // Process MCP work queue
         {
-            std::lock_guard lock(capability_request_mutex_);
-            if (pending_capability_request_) {
-                auto& req = *pending_capability_request_;
-                *req.result = processCapabilityRequest(req.name, req.args);
-
-                // Signal completion
-                {
-                    std::lock_guard done_lock(*req.mtx);
-                    *req.done = true;
-                }
-                req.cv->notify_one();
-                pending_capability_request_.reset();
+            std::vector<WorkItem> work;
+            {
+                std::lock_guard lock(work_queue_mutex_);
+                work.swap(work_queue_);
+            }
+            for (auto& item : work) {
+                if (item.run)
+                    item.run();
             }
         }
 
@@ -1020,10 +1096,12 @@ namespace lfs::vis {
         }
 
         if (!gui_manager_) {
+            beginShutdown();
             return true;
         }
 
         if (gui_manager_->isForceExit()) {
+            beginShutdown();
 #ifdef WIN32
             const HWND hwnd = GetConsoleWindow();
             Sleep(1);
@@ -1045,6 +1123,8 @@ namespace lfs::vis {
     }
 
     void VisualizerImpl::shutdown() {
+        beginShutdown();
+
         // Stop training before GPU resources are freed
         if (trainer_manager_) {
             if (trainer_manager_->isTrainingActive()) {
@@ -1157,6 +1237,60 @@ namespace lfs::vis {
         data_loader_->clearScene();
     }
 
+    bool VisualizerImpl::postWork(WorkItem work) {
+        std::lock_guard lock(work_queue_mutex_);
+        if (!accepting_work_)
+            return false;
+        work_queue_.push_back(std::move(work));
+        return true;
+    }
+
+    bool VisualizerImpl::acceptsPostedWork() const {
+        std::lock_guard lock(work_queue_mutex_);
+        return accepting_work_;
+    }
+
+    void VisualizerImpl::setShutdownRequestedCallback(std::function<void()> callback) {
+        std::lock_guard lock(shutdown_callback_mutex_);
+        shutdown_requested_callback_ = std::move(callback);
+    }
+
+    std::expected<void, std::string> VisualizerImpl::startTraining() {
+        if (!trainer_manager_)
+            return std::unexpected("Trainer manager not initialized");
+        if (!trainer_manager_->startTraining())
+            return std::unexpected("Failed to start training");
+        return {};
+    }
+
+    std::expected<std::filesystem::path, std::string> VisualizerImpl::saveCheckpoint(
+        const std::optional<std::filesystem::path>& path) {
+        if (!trainer_manager_ || !trainer_manager_->getTrainer())
+            return std::unexpected("No active training session");
+
+        auto* const trainer = trainer_manager_->getTrainer();
+        if (trainer_manager_->isTrainingActive()) {
+            if (path) {
+                return std::unexpected(
+                    "Custom checkpoint output paths are not supported while training is active");
+            }
+            return std::unexpected(
+                "Cannot report checkpoint save success while training is active; "
+                "use the async training checkpoint action or stop training first");
+        }
+
+        const int iteration = trainer->get_current_iteration();
+        if (path) {
+            if (auto result = trainer->save_checkpoint_to(*path, iteration); !result)
+                return std::unexpected(result.error());
+            return *path;
+        }
+
+        if (auto result = trainer->save_checkpoint(iteration); !result)
+            return std::unexpected(result.error());
+        return trainer->get_output_path();
+    }
+
     void VisualizerImpl::performReset() {
         assert(scene_manager_ && scene_manager_->hasDataset());
 
@@ -1212,24 +1346,6 @@ namespace lfs::vis {
 
     void VisualizerImpl::handleSwitchToLatestCheckpoint() {
         LOG_WARN("Switch to latest checkpoint not implemented without project management");
-    }
-
-    CapabilityInvokeResult VisualizerImpl::processCapabilityRequest(const std::string& name, const std::string& args) {
-        LOG_INFO("processCapabilityRequest: {} args={}", name, args);
-
-        if (!scene_manager_) {
-            LOG_WARN("processCapabilityRequest: scene_manager_ is NULL");
-            return {false, "", "No scene available"};
-        }
-
-        python::SceneContextGuard ctx(&scene_manager_->getScene());
-        auto result = python::invoke_capability(name, args);
-
-        if (result.success && rendering_manager_) {
-            rendering_manager_->markDirty(DirtyFlag::ALL);
-        }
-
-        return {result.success, result.result_json, result.error};
     }
 
 } // namespace lfs::vis

@@ -66,6 +66,7 @@ add_library(lfs_visualizer ${LFS_VIS_LIB_TYPE}
         gui/gizmo_transform.cpp
         gui/html_viewer_export.cpp
         gui/ui_widgets.cpp
+        gui_capabilities.cpp
         gui/panels/windows_console_utils.cpp
         gui/panels/tools_panel.cpp
         gui/panels/python_console_panel.cpp
@@ -118,6 +119,7 @@ add_library(lfs_visualizer ${LFS_VIS_LIB_TYPE}
         operator/ops/align_ops.cpp
         operator/ops/brush_ops.cpp
         operator/ops/edit_ops.cpp
+        operator/ops/scene_ops.cpp
         operator/ops/selection_ops.cpp
         operator/ops/transform_ops.cpp
 
@@ -133,8 +135,7 @@ add_library(lfs_visualizer ${LFS_VIS_LIB_TYPE}
         # Python hook invoker (DLL boundary singleton)
         ${CMAKE_SOURCE_DIR}/src/python/ui_hooks.cpp
 
-        # IPC for MCP integration
-        ipc/selection_server.cpp
+        # View/render bridge for plugin capabilities
         ipc/view_context.cpp
 
         gui/panels/menu_bar.cpp

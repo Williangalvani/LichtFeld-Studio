@@ -52,9 +52,13 @@ def training_panel_module(monkeypatch):
 class _HandleStub:
     def __init__(self):
         self.dirty_fields = []
+        self.dirty_all_count = 0
 
     def dirty(self, name):
         self.dirty_fields.append(name)
+
+    def dirty_all(self):
+        self.dirty_all_count += 1
 
 
 def _make_signal(value):
@@ -66,13 +70,22 @@ class _ParamsStub:
         self.iterations = 1234
         self.means_lr = 0.25
         self.steps_scaler = 1.0
+        self.start_refine = 500
+        self.stop_refine = 15000
+        self.refine_every = 100
+        self.reset_every = 3000
+        self.sh_degree_interval = 1000
         self.ppisp_controller_activation_step = 5678
 
     def has_params(self):
         return True
 
     def apply_step_scaling(self, value):
+        scale = value / self.steps_scaler if self.steps_scaler else value
         self.steps_scaler = value
+        self.iterations = int(self.iterations * scale)
+        self.start_refine = int(self.start_refine * scale)
+        self.stop_refine = int(self.stop_refine * scale)
 
     def set(self, prop, value):
         setattr(self, prop, value)
@@ -350,3 +363,52 @@ def test_invalid_numeric_commit_restores_canonical_value(
 
     assert panel._text_bufs[binding_name] == expected_text
     assert panel._handle.dirty_fields == [binding_name]
+
+
+def test_steps_scaler_syncs_dependent_text_bufs(training_panel_module, monkeypatch):
+    """Issue #970: steps_scaler change must refresh all dependent param buffers."""
+    panel = training_panel_module.TrainingPanel()
+    panel._handle = _HandleStub()
+    params = _ParamsStub()
+    params.iterations = 30000
+    params.start_refine = 500
+    params.stop_refine = 15000
+    params.steps_scaler = 1.0
+    dataset = _DatasetStub()
+
+    monkeypatch.setattr(
+        training_panel_module,
+        "lf",
+        SimpleNamespace(
+            optimization_params=lambda: params,
+            dataset_params=lambda: dataset,
+        ),
+    )
+
+    model = _ModelStub()
+    panel._bind_num_props(model, lambda: params, lambda: dataset)
+
+    assert panel._set_num_prop("steps_scaler", "2.0", float, 0.01, None) is True
+    assert params.steps_scaler == 2.0
+    assert params.iterations == 60000
+    assert panel._text_bufs["iterations_str"] == "60,000"
+    assert panel._handle.dirty_all_count >= 1
+
+
+def test_set_bool_prop_hasattr_guard(training_panel_module, monkeypatch):
+    """Issue #972: _set_bool_prop must not crash on missing attributes."""
+    panel = training_panel_module.TrainingPanel()
+    panel._handle = _HandleStub()
+    params = _ParamsStub()
+
+    monkeypatch.setattr(
+        training_panel_module,
+        "lf",
+        SimpleNamespace(
+            optimization_params=lambda: params,
+            get_render_settings=lambda: None,
+        ),
+    )
+
+    panel._set_bool_prop("nonexistent_property", True)
+    assert not hasattr(params, "nonexistent_property")

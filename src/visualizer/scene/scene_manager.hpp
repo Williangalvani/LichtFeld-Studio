@@ -17,6 +17,7 @@
 #include "selection/selection_service.hpp"
 #include "training/components/ppisp.hpp"
 #include "training/components/ppisp_controller_pool.hpp"
+#include <expected>
 #include <filesystem>
 #include <mutex>
 
@@ -157,8 +158,8 @@ namespace lfs::vis {
         core::NodeId getActiveSelectionEllipsoidId() const;
         void syncEllipsoidToRenderSettings();
 
-        void loadDataset(const std::filesystem::path& path,
-                         const lfs::core::param::TrainingParameters& params);
+        std::expected<void, std::string> loadDataset(const std::filesystem::path& path,
+                                                     const lfs::core::param::TrainingParameters& params);
 
         // Import COLMAP cameras only (no images required)
         // Loads cameras from sparse folder and displays frustums without needing image files
@@ -221,12 +222,16 @@ namespace lfs::vis {
         void selectAllGaussians();
         void copySelectionToClipboard();
         void pasteSelectionFromClipboard();
-        void selectBrush(float x, float y, float radius, const std::string& mode, int camera_index = 0);
-        void selectRect(float x0, float y0, float x1, float y1, const std::string& mode, int camera_index = 0);
-        void selectPolygon(const std::vector<float>& points, const std::string& mode, int camera_index = 0);
-        void selectLasso(const std::vector<float>& points, const std::string& mode, int camera_index = 0);
-        void selectRing(float x, float y, const std::string& mode, int camera_index = 0);
-        void applySelectionMask(const std::vector<uint8_t>& mask);
+        [[nodiscard]] SelectionResult selectBrush(float x, float y, float radius, const std::string& mode,
+                                                  int camera_index = 0);
+        [[nodiscard]] SelectionResult selectRect(float x0, float y0, float x1, float y1, const std::string& mode,
+                                                 int camera_index = 0);
+        [[nodiscard]] SelectionResult selectPolygon(const std::vector<float>& points, const std::string& mode,
+                                                    int camera_index = 0);
+        [[nodiscard]] SelectionResult selectLasso(const std::vector<float>& points, const std::string& mode,
+                                                  int camera_index = 0);
+        [[nodiscard]] SelectionResult selectRing(float x, float y, const std::string& mode, int camera_index = 0);
+        [[nodiscard]] SelectionResult applySelectionMask(const std::vector<uint8_t>& mask);
 
         void initSelectionService();
         [[nodiscard]] SelectionService* getSelectionService() { return selection_service_.get(); }

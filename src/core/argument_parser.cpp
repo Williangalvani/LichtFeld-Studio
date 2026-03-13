@@ -748,17 +748,6 @@ lfs::core::args::parse_args(const int argc, const char* const argv[]) {
             return WarmupMode{};
         }
 
-        if (arg1 == "--mcp") {
-            McpMode mode;
-            if (argc >= 3) {
-                const std::filesystem::path scene_path = lfs::core::utf8_to_path(argv[2]);
-                if (std::filesystem::exists(scene_path)) {
-                    mode.scene_path = scene_path;
-                }
-            }
-            return mode;
-        }
-
         if (arg1 == "convert") {
             // Handle convert subcommand below
         } else if (arg1 == "plugin") {

@@ -27,6 +27,7 @@
 #include "training/trainer.hpp"
 #include "training/training_manager.hpp"
 #include "training/training_setup.hpp"
+#include "visualizer/gui_capabilities.hpp"
 #include <algorithm>
 #include <format>
 #include <glm/gtc/quaternion.hpp>
@@ -68,6 +69,10 @@ namespace lfs::vis {
 
         cmd::SetPLYVisibility::when([this](const auto& cmd) {
             setPLYVisibility(cmd.name, cmd.visible);
+        });
+
+        cmd::SetNodeLocked::when([this](const auto& cmd) {
+            scene_.setNodeLocked(cmd.name, cmd.locked);
         });
 
         cmd::ClearScene::when([this](const auto&) {
@@ -200,12 +205,12 @@ namespace lfs::vis {
         cmd::SelectAll::when([this](const auto&) { selectAllGaussians(); });
         cmd::CopySelection::when([this](const auto&) { copySelectionToClipboard(); });
         cmd::PasteSelection::when([this](const auto&) { pasteSelectionFromClipboard(); });
-        cmd::SelectBrush::when([this](const auto& e) { selectBrush(e.x, e.y, e.radius, e.mode, e.camera_index); });
-        cmd::SelectRect::when([this](const auto& e) { selectRect(e.x0, e.y0, e.x1, e.y1, e.mode, e.camera_index); });
-        cmd::SelectPolygon::when([this](const auto& e) { selectPolygon(e.points, e.mode, e.camera_index); });
-        cmd::SelectLasso::when([this](const auto& e) { selectLasso(e.points, e.mode, e.camera_index); });
-        cmd::SelectRing::when([this](const auto& e) { selectRing(e.x, e.y, e.mode, e.camera_index); });
-        cmd::ApplySelectionMask::when([this](const auto& e) { applySelectionMask(e.mask); });
+        cmd::SelectBrush::when([this](const auto& e) { (void)selectBrush(e.x, e.y, e.radius, e.mode, e.camera_index); });
+        cmd::SelectRect::when([this](const auto& e) { (void)selectRect(e.x0, e.y0, e.x1, e.y1, e.mode, e.camera_index); });
+        cmd::SelectPolygon::when([this](const auto& e) { (void)selectPolygon(e.points, e.mode, e.camera_index); });
+        cmd::SelectLasso::when([this](const auto& e) { (void)selectLasso(e.points, e.mode, e.camera_index); });
+        cmd::SelectRing::when([this](const auto& e) { (void)selectRing(e.x, e.y, e.mode, e.camera_index); });
+        cmd::ApplySelectionMask::when([this](const auto& e) { (void)applySelectionMask(e.mask); });
 
         state::SelectionChanged::when([](const auto& event) {
             python::update_selection(event.has_selection, event.count);
@@ -1339,6 +1344,13 @@ namespace lfs::vis {
             return node->id;
         }
 
+        for (const core::NodeId child_id : node->children) {
+            const auto* const child = scene_.getNodeById(child_id);
+            if (child && child->type == core::NodeType::CROPBOX) {
+                return child_id;
+            }
+        }
+
         // If selected node is a splat or pointcloud, return its cropbox child
         if (node->type == core::NodeType::SPLAT || node->type == core::NodeType::POINTCLOUD) {
             return scene_.getCropBoxForSplat(node->id);
@@ -1408,6 +1420,13 @@ namespace lfs::vis {
 
         if (node->type == core::NodeType::ELLIPSOID) {
             return node->id;
+        }
+
+        for (const core::NodeId child_id : node->children) {
+            const auto* const child = scene_.getNodeById(child_id);
+            if (child && child->type == core::NodeType::ELLIPSOID) {
+                return child_id;
+            }
         }
 
         if (node->type == core::NodeType::SPLAT || node->type == core::NodeType::POINTCLOUD) {
@@ -1528,8 +1547,8 @@ namespace lfs::vis {
         }
     }
 
-    void SceneManager::loadDataset(const std::filesystem::path& path,
-                                   const lfs::core::param::TrainingParameters& params) {
+    std::expected<void, std::string> SceneManager::loadDataset(const std::filesystem::path& path,
+                                                               const lfs::core::param::TrainingParameters& params) {
         LOG_TIMER("SceneManager::loadDataset");
 
         // Emit start event for progress tracking
@@ -1553,7 +1572,7 @@ namespace lfs::vis {
                     .num_images = 0,
                     .num_points = 0}
                     .emit();
-                return;
+                return std::unexpected(validation_result.error());
             }
 
             // Validation passed - now clear and load
@@ -1576,7 +1595,7 @@ namespace lfs::vis {
                     .num_images = 0,
                     .num_points = 0}
                     .emit();
-                return;
+                return std::unexpected(load_result.error());
             }
 
             // Create Trainer from Scene
@@ -1633,6 +1652,8 @@ namespace lfs::vis {
                 LOG_INFO("Switched to point cloud mode ({} points)", num_gaussians > 0 ? num_gaussians : num_points);
             }
 
+            return {};
+
         } catch (const std::exception& e) {
             LOG_ERROR("Failed to load dataset: {} (path: {})", e.what(), lfs::core::path_to_utf8(path));
 
@@ -1644,6 +1665,7 @@ namespace lfs::vis {
                 .num_images = 0,
                 .num_points = 0}
                 .emit();
+            return std::unexpected(e.what());
         }
     }
 
@@ -2614,60 +2636,25 @@ namespace lfs::vis {
     }
 
     void SceneManager::handleAddCropBox(const std::string& node_name) {
-        const auto* node = scene_.getNode(node_name);
-        if (!node)
-            return;
-
-        if (node->type != core::NodeType::SPLAT && node->type != core::NodeType::POINTCLOUD) {
-            LOG_WARN("Cannot add cropbox to node type: {}", static_cast<int>(node->type));
+        auto parent_id = cap::resolveCropBoxParentId(*this, std::optional<std::string>(node_name));
+        if (!parent_id) {
+            LOG_WARN("Cannot add cropbox for '{}': {}", node_name, parent_id.error());
             return;
         }
 
-        // Check if cropbox already exists for this node
-        const core::NodeId existing = scene_.getCropBoxForSplat(node->id);
-        if (existing != core::NULL_NODE) {
-            LOG_DEBUG("Cropbox already exists for '{}'", node_name);
-            selectNode(scene_.getNodeById(existing)->name);
+        auto cropbox_id = cap::ensureCropBox(*this, services().renderingOrNull(), *parent_id);
+        if (!cropbox_id) {
+            LOG_WARN("Failed to add cropbox for '{}': {}", node_name, cropbox_id.error());
             return;
         }
 
-        const std::string cropbox_name = node_name + "_cropbox";
-        const core::NodeId cropbox_id = scene_.addCropBox(cropbox_name, node->id);
-        if (cropbox_id == core::NULL_NODE)
+        const auto* cropbox = scene_.getNodeById(*cropbox_id);
+        const auto* parent = scene_.getNodeById(*parent_id);
+        if (!cropbox || !parent)
             return;
 
-        // Fit cropbox to parent bounds and enable it
-        core::CropBoxData data;
-        glm::vec3 min_bounds, max_bounds;
-        if (scene_.getNodeBounds(node->id, min_bounds, max_bounds)) {
-            data.min = min_bounds;
-            data.max = max_bounds;
-        }
-        data.enabled = true;
-        scene_.setCropBoxData(cropbox_id, data);
-
-        // Emit PLYAdded event
-        if (const auto* cropbox = scene_.getNodeById(cropbox_id)) {
-            state::PLYAdded{
-                .name = cropbox->name,
-                .node_gaussians = 0,
-                .total_gaussians = scene_.getTotalGaussianCount(),
-                .is_visible = cropbox->visible,
-                .parent_name = node_name,
-                .is_group = false,
-                .node_type = static_cast<int>(core::NodeType::CROPBOX)}
-                .emit();
-        }
-
-        // Enable cropbox visibility in render settings
-        if (auto* rm = services().renderingOrNull()) {
-            auto settings = rm->getSettings();
-            settings.show_crop_box = true;
-            rm->updateSettings(settings);
-        }
-
-        selectNode(cropbox_name);
-        LOG_INFO("Added cropbox '{}' as child of '{}'", cropbox_name, node_name);
+        selectNode(cropbox->name);
+        LOG_INFO("Added cropbox '{}' as child of '{}'", cropbox->name, parent->name);
     }
 
     void SceneManager::handleAddCropEllipsoid(const std::string& node_name) {
@@ -2736,42 +2723,20 @@ namespace lfs::vis {
     }
 
     void SceneManager::handleResetCropBox() {
-        const core::SceneNode* cropbox_node = nullptr;
-        {
-            std::shared_lock slock(selection_.mutex());
-            for (const auto id : selection_.selectedNodeIds()) {
-                const auto* node = scene_.getNodeById(id);
-                if (node && node->type == core::NodeType::CROPBOX && node->cropbox) {
-                    cropbox_node = node;
-                    break;
-                }
-            }
-        }
-
-        if (!cropbox_node) {
-            LOG_WARN("No cropbox selected for reset");
+        auto cropbox_id = cap::resolveCropBoxId(*this, std::nullopt);
+        if (!cropbox_id) {
+            LOG_WARN("No cropbox selected for reset: {}", cropbox_id.error());
             return;
         }
 
-        auto* node = scene_.getMutableNode(cropbox_node->name);
-        if (!node || !node->cropbox)
+        if (auto result = cap::resetCropBox(*this, services().renderingOrNull(), *cropbox_id); !result) {
+            LOG_WARN("Failed to reset cropbox: {}", result.error());
             return;
-
-        node->cropbox->min = glm::vec3(-1.0f);
-        node->cropbox->max = glm::vec3(1.0f);
-        node->cropbox->inverse = false;
-        node->local_transform = glm::mat4(1.0f);
-        node->transform_dirty = true;
-
-        if (auto* rm = services().renderingOrNull()) {
-            auto settings = rm->getSettings();
-            settings.use_crop_box = false;
-            rm->updateSettings(settings);
-            rm->markDirty(DirtyFlag::SPLATS | DirtyFlag::OVERLAY);
         }
 
-        scene_.notifyMutation(core::Scene::MutationType::MODEL_CHANGED);
-        LOG_INFO("Reset cropbox '{}'", cropbox_node->name);
+        if (const auto* cropbox = scene_.getNodeById(*cropbox_id)) {
+            LOG_INFO("Reset cropbox '{}'", cropbox->name);
+        }
     }
 
     void SceneManager::handleResetEllipsoid() {
@@ -2813,77 +2778,23 @@ namespace lfs::vis {
     }
 
     void SceneManager::updateCropBoxToFitScene(const bool use_percentile) {
-        if (!services().renderingOrNull())
-            return;
-
-        // Find selected cropbox
-        const core::SceneNode* cropbox_node = nullptr;
-        const core::SceneNode* target_node = nullptr;
-
-        {
-            std::shared_lock slock(selection_.mutex());
-            for (const auto id : selection_.selectedNodeIds()) {
-                const auto* node = scene_.getNodeById(id);
-                if (!node)
-                    continue;
-                if (node->type == core::NodeType::CROPBOX && node->cropbox) {
-                    cropbox_node = node;
-                    if (node->parent_id != core::NULL_NODE)
-                        target_node = scene_.getNodeById(node->parent_id);
-                    break;
-                }
-            }
-        }
-
-        if (!cropbox_node) {
-            LOG_WARN("No cropbox found in selection");
+        auto cropbox_id = cap::resolveCropBoxId(*this, std::nullopt);
+        if (!cropbox_id) {
+            LOG_WARN("No cropbox found in selection: {}", cropbox_id.error());
             return;
         }
 
-        if (!target_node) {
-            for (const auto* node : scene_.getNodes()) {
-                if (node->type == core::NodeType::SPLAT || node->type == core::NodeType::POINTCLOUD) {
-                    target_node = node;
-                    break;
-                }
-            }
-        }
-
-        if (!target_node) {
-            LOG_WARN("No target splat found for cropbox '{}'", cropbox_node->name);
+        if (auto result = cap::fitCropBoxToParent(*this, services().renderingOrNull(), *cropbox_id, use_percentile);
+            !result) {
+            LOG_WARN("Failed to fit cropbox: {}", result.error());
             return;
         }
 
-        glm::vec3 min_bounds, max_bounds;
-        bool bounds_valid = false;
-
-        if (target_node->type == core::NodeType::SPLAT && target_node->model && target_node->model->size() > 0) {
-            bounds_valid = lfs::core::compute_bounds(*target_node->model, min_bounds, max_bounds, 0.0f, use_percentile);
-        } else if (target_node->type == core::NodeType::POINTCLOUD && target_node->point_cloud && target_node->point_cloud->size() > 0) {
-            bounds_valid = lfs::core::compute_bounds(*target_node->point_cloud, min_bounds, max_bounds, 0.0f, use_percentile);
+        const auto* cropbox = scene_.getNodeById(*cropbox_id);
+        const auto* parent = cropbox ? scene_.getNodeById(cropbox->parent_id) : nullptr;
+        if (cropbox && parent) {
+            LOG_INFO("Fit '{}' to '{}'", cropbox->name, parent->name);
         }
-
-        if (!bounds_valid) {
-            LOG_WARN("Cannot compute bounds for '{}'", target_node->name);
-            return;
-        }
-
-        const glm::vec3 center = (min_bounds + max_bounds) * 0.5f;
-        const glm::vec3 half_size = (max_bounds - min_bounds) * 0.5f;
-
-        if (auto* node = scene_.getMutableNode(cropbox_node->name); node && node->cropbox) {
-            node->cropbox->min = -half_size;
-            node->cropbox->max = half_size;
-            node->local_transform = glm::translate(glm::mat4(1.0f), center);
-            node->transform_dirty = true;
-        }
-
-        if (auto* rm = services().renderingOrNull())
-            rm->markDirty(DirtyFlag::SPLATS | DirtyFlag::OVERLAY);
-
-        LOG_INFO("Fit '{}' to '{}': center({:.2f},{:.2f},{:.2f}) size({:.2f},{:.2f},{:.2f})",
-                 cropbox_node->name, target_node->name, center.x, center.y, center.z,
-                 half_size.x * 2, half_size.y * 2, half_size.z * 2);
     }
 
     void SceneManager::updateEllipsoidToFitScene(const bool use_percentile) {
@@ -3482,9 +3393,9 @@ namespace lfs::vis {
             rm->markDirty(DirtyFlag::SPLATS | DirtyFlag::SELECTION);
     }
 
-    void SceneManager::selectBrush(float x, float y, float radius, const std::string& mode, const int camera_index) {
+    SelectionResult SceneManager::selectBrush(float x, float y, float radius, const std::string& mode, const int camera_index) {
         if (!selection_service_)
-            return;
+            return {false, 0, "Selection service not initialized"};
 
         SelectionMode sel_mode = SelectionMode::Replace;
         if (mode == "add")
@@ -3492,13 +3403,13 @@ namespace lfs::vis {
         else if (mode == "remove")
             sel_mode = SelectionMode::Remove;
 
-        (void)selection_service_->selectBrush(x, y, radius, sel_mode, camera_index);
+        return selection_service_->selectBrush(x, y, radius, sel_mode, camera_index);
     }
 
-    void SceneManager::selectRect(float x0, float y0, float x1, float y1, const std::string& mode,
-                                  const int camera_index) {
+    SelectionResult SceneManager::selectRect(float x0, float y0, float x1, float y1, const std::string& mode,
+                                             const int camera_index) {
         if (!selection_service_)
-            return;
+            return {false, 0, "Selection service not initialized"};
 
         SelectionMode sel_mode = SelectionMode::Replace;
         if (mode == "add")
@@ -3506,13 +3417,13 @@ namespace lfs::vis {
         else if (mode == "remove")
             sel_mode = SelectionMode::Remove;
 
-        (void)selection_service_->selectRect(x0, y0, x1, y1, sel_mode, camera_index);
+        return selection_service_->selectRect(x0, y0, x1, y1, sel_mode, camera_index);
     }
 
-    void SceneManager::selectPolygon(const std::vector<float>& points, const std::string& mode,
-                                     const int camera_index) {
+    SelectionResult SceneManager::selectPolygon(const std::vector<float>& points, const std::string& mode,
+                                                const int camera_index) {
         if (!selection_service_ || points.size() < 6 || (points.size() % 2) != 0)
-            return;
+            return {false, 0, "Polygon requires at least 3 x/y point pairs"};
 
         SelectionMode sel_mode = SelectionMode::Replace;
         if (mode == "add")
@@ -3521,13 +3432,13 @@ namespace lfs::vis {
             sel_mode = SelectionMode::Remove;
 
         auto vertices = core::Tensor::from_vector(points, {points.size() / 2, size_t{2}}, core::Device::CUDA);
-        (void)selection_service_->selectPolygon(vertices, sel_mode, camera_index);
+        return selection_service_->selectPolygon(vertices, sel_mode, camera_index);
     }
 
-    void SceneManager::selectLasso(const std::vector<float>& points, const std::string& mode,
-                                   const int camera_index) {
+    SelectionResult SceneManager::selectLasso(const std::vector<float>& points, const std::string& mode,
+                                              const int camera_index) {
         if (!selection_service_ || points.size() < 6 || (points.size() % 2) != 0)
-            return;
+            return {false, 0, "Lasso requires at least 3 x/y point pairs"};
 
         SelectionMode sel_mode = SelectionMode::Replace;
         if (mode == "add")
@@ -3536,12 +3447,12 @@ namespace lfs::vis {
             sel_mode = SelectionMode::Remove;
 
         auto vertices = core::Tensor::from_vector(points, {points.size() / 2, size_t{2}}, core::Device::CUDA);
-        (void)selection_service_->selectLasso(vertices, sel_mode, camera_index);
+        return selection_service_->selectLasso(vertices, sel_mode, camera_index);
     }
 
-    void SceneManager::selectRing(const float x, const float y, const std::string& mode, const int camera_index) {
+    SelectionResult SceneManager::selectRing(const float x, const float y, const std::string& mode, const int camera_index) {
         if (!selection_service_)
-            return;
+            return {false, 0, "Selection service not initialized"};
 
         SelectionMode sel_mode = SelectionMode::Replace;
         if (mode == "add")
@@ -3549,14 +3460,14 @@ namespace lfs::vis {
         else if (mode == "remove")
             sel_mode = SelectionMode::Remove;
 
-        (void)selection_service_->selectRing(x, y, sel_mode, camera_index);
+        return selection_service_->selectRing(x, y, sel_mode, camera_index);
     }
 
-    void SceneManager::applySelectionMask(const std::vector<uint8_t>& mask) {
+    SelectionResult SceneManager::applySelectionMask(const std::vector<uint8_t>& mask) {
         if (!selection_service_)
-            return;
+            return {false, 0, "Selection service not initialized"};
 
-        (void)selection_service_->applyMask(mask, SelectionMode::Replace);
+        return selection_service_->applyMask(mask, SelectionMode::Replace);
     }
 
 } // namespace lfs::vis

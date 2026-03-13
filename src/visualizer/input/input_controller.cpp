@@ -22,6 +22,7 @@
 #include "tools/tool_base.hpp"
 #include "tools/unified_tool_registry.hpp"
 #include "training/training_manager.hpp"
+#include "visualizer/gui_capabilities.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <format>
@@ -692,9 +693,11 @@ namespace lfs::vis {
                         const auto [ray_origin, ray_dir] = computePickRay(x, y);
                         const std::string picked = scene_manager->pickNodeByRay(ray_origin, ray_dir);
                         if (!picked.empty()) {
-                            scene_manager->selectNode(picked);
+                            if (auto result = cap::selectNode(*scene_manager, picked); !result) {
+                                LOG_WARN("Node pick selection failed: {}", result.error());
+                            }
                         } else {
-                            scene_manager->clearSelection();
+                            (void)cap::clearNodeSelection(*scene_manager);
                         }
                     } else {
                         // Rectangle selection — convert window coords to viewport-local
@@ -716,9 +719,11 @@ namespace lfs::vis {
                             viewport_.windowSize);
 
                         if (picked_nodes.empty()) {
-                            scene_manager->clearSelection();
+                            (void)cap::clearNodeSelection(*scene_manager);
                         } else {
-                            scene_manager->selectNodes(picked_nodes);
+                            if (auto result = cap::selectNodes(*scene_manager, picked_nodes); !result) {
+                                LOG_WARN("Rectangle node selection failed: {}", result.error());
+                            }
                         }
                     }
                 }
@@ -1569,7 +1574,9 @@ namespace lfs::vis {
             return;
         for (const auto* node : sm->getScene().getNodes()) {
             if (node->type == core::NodeType::CAMERA && node->camera_uid == uid) {
-                sm->selectNode(node->name);
+                if (auto result = cap::selectNode(*sm, node->name); !result) {
+                    LOG_WARN("Camera selection failed for '{}': {}", node->name, result.error());
+                }
                 return;
             }
         }

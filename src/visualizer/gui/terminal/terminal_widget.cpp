@@ -567,6 +567,8 @@ namespace lfs::vis::terminal {
     }
 
     std::string TerminalWidget::getSelection() const {
+        std::lock_guard lock(mutex_);
+
         if (selection_start_.row == selection_end_.row && selection_start_.col == selection_end_.col) {
             return {};
         }
@@ -600,6 +602,8 @@ namespace lfs::vis::terminal {
     }
 
     std::string TerminalWidget::getAllText() const {
+        std::lock_guard lock(mutex_);
+
         std::string result;
         result.reserve(scrollback_.size() * cols_ + rows_ * cols_);
 
