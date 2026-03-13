@@ -1020,6 +1020,10 @@ namespace lfs::vis::gui {
                     continue;
                 auto rml_key = sdlScancodeToRml(static_cast<SDL_Scancode>(sc));
                 if (rml_key != Rml::Input::KI_UNKNOWN) {
+                    if (text_input_handler && text_input_handler->handleKeyDown(rml_key, mods)) {
+                        had_input = true;
+                        continue;
+                    }
                     rml_context_->ProcessKeyDown(rml_key, mods);
                     had_input = true;
                 }

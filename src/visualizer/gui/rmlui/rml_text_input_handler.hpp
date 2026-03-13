@@ -5,6 +5,7 @@
 #pragma once
 
 #include <RmlUi/Core/Core.h>
+#include <RmlUi/Core/Input.h>
 #include <RmlUi/Core/TextInputContext.h>
 #include <RmlUi/Core/TextInputHandler.h>
 
@@ -18,6 +19,7 @@ namespace lfs::vis::gui {
         void OnDeactivate(Rml::TextInputContext* input_context) override;
         void OnDestroy(Rml::TextInputContext* input_context) override;
 
+        bool handleKeyDown(Rml::Input::KeyIdentifier key_identifier, int modifiers);
         bool handleTextEditing(std::string_view composition, int cursor_start, int selection_length);
         bool handleTextInput(std::string_view text);
         bool isComposing() const { return composing_; }

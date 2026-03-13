@@ -476,8 +476,11 @@ namespace lfs::vis::gui {
                     continue;
                 }
                 const auto rml_key = gui::sdlScancodeToRml(static_cast<SDL_Scancode>(sc));
-                if (rml_key != Rml::Input::KI_UNKNOWN)
+                if (rml_key != Rml::Input::KI_UNKNOWN) {
+                    if (text_input_handler && text_input_handler->handleKeyDown(rml_key, mods))
+                        continue;
                     rml_context_->ProcessKeyDown(rml_key, mods);
+                }
             }
             for (int sc : input.keys_released) {
                 if (composing && (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER ||

@@ -8,6 +8,7 @@
 #include <RmlUi/Core/TextInputContext.h>
 
 #include <algorithm>
+#include <limits>
 
 namespace lfs::vis::gui {
 
@@ -36,6 +37,20 @@ namespace lfs::vis::gui {
 
         input_context_ = nullptr;
         resetState();
+    }
+
+    bool RmlTextInputHandler::handleKeyDown(const Rml::Input::KeyIdentifier key_identifier,
+                                            const int modifiers) {
+        if (!input_context_ || composing_)
+            return false;
+
+        const bool ctrl_pressed = (modifiers & Rml::Input::KM_CTRL) != 0;
+        const bool alt_pressed = (modifiers & Rml::Input::KM_ALT) != 0;
+        if (key_identifier != Rml::Input::KI_A || !ctrl_pressed || alt_pressed)
+            return false;
+
+        input_context_->SetSelectionRange(0, std::numeric_limits<int>::max());
+        return true;
     }
 
     bool RmlTextInputHandler::handleTextEditing(const std::string_view composition,

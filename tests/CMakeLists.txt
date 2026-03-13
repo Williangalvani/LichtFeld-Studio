@@ -259,6 +259,7 @@ set(TEST_FILES
     test_mesh_data.cpp
     test_openmesh_bridge.cpp
     test_mesh_loader.cpp
+    test_rml_text_input_handler.cpp
     test_rotated_sh_correctness.cpp
     test_tensor_stream.cpp
     test_tensor_memory_planner.cpp
