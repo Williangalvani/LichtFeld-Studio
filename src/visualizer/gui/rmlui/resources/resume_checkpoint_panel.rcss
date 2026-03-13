@@ -2,6 +2,17 @@
 
 #content-wrap {
     overflow-y: auto;
+    min-width: 0;
+}
+
+#content {
+    min-width: 0;
+}
+
+.impdlg-form {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
 
 .impdlg-badge-row {
@@ -30,60 +41,79 @@
 }
 
 .impdlg-info-row,
-.impdlg-field-row {
+.impdlg-control-group {
     display: flex;
     align-items: flex-start;
-    gap: 8dp;
-    margin-bottom: 6dp;
-}
-
-.impdlg-field-row {
-    align-items: center;
+    gap: 10dp;
+    margin-bottom: 8dp;
+    min-width: 0;
 }
 
 .impdlg-field-label {
-    width: 128dp;
+    width: 148dp;
     flex-shrink: 0;
     font-size: 10dp;
+    line-height: 14dp;
 }
 
-.impdlg-info-main {
+.impdlg-info-main,
+.impdlg-control-main {
     display: flex;
-    align-items: flex-start;
-    gap: 6dp;
+    flex-direction: column;
+    gap: 3dp;
     flex: 1;
+    min-width: 0;
+}
+
+.impdlg-control-row {
+    display: flex;
+    align-items: center;
+    gap: 8dp;
+    flex-wrap: wrap;
+    min-width: 0;
 }
 
 .impdlg-value {
-    flex: 1;
+    display: block;
     font-size: 10dp;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.impdlg-meta {
+    display: block;
+    min-width: 0;
 }
 
 .impdlg-input {
     flex: 1;
+    min-width: 220dp;
 }
 
 .impdlg-browse-btn {
-    min-width: 72dp;
+    min-width: 88dp;
     text-align: center;
+    flex-shrink: 0;
 }
 
 .impdlg-status {
-    min-width: 48dp;
+    min-width: 0;
     font-size: 10dp;
-    text-align: right;
+    text-align: left;
     flex-shrink: 0;
 }
 
 .impdlg-note {
     display: block;
-    margin-top: 2dp;
+    margin-top: 4dp;
+    min-width: 0;
+    word-break: break-word;
 }
 
 .impdlg-buttons {
     display: flex;
-    gap: 6dp;
-    margin-top: 8dp;
+    gap: 8dp;
+    margin-top: 10dp;
 }
 
 .impdlg-action-btn {

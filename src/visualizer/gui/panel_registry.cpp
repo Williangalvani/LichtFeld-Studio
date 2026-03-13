@@ -17,6 +17,26 @@
 namespace lfs::vis::gui {
 
     namespace {
+        float floatingUiScale() {
+            return std::max(1.0f, getThemeDpiScale());
+        }
+
+        float floatingResizeEdge() {
+            return 6.0f * floatingUiScale();
+        }
+
+        float scaledFloatingDimensionForScale(const float value, const float scale) {
+            if (value <= 0.0f)
+                return value;
+            return std::round(value * std::max(1.0f, scale));
+        }
+
+        void resetFloatingPanelSize(PanelInfo& panel, const float scale) {
+            panel.initial_width = scaledFloatingDimensionForScale(panel.original_width, scale);
+            panel.initial_height = scaledFloatingDimensionForScale(panel.original_height, scale);
+            panel.float_user_height = 0.0f;
+        }
+
         const char* panelSpaceName(const PanelSpace space) {
             switch (space) {
             case PanelSpace::SidePanel: return "side_panel";
@@ -113,6 +133,8 @@ namespace lfs::vis::gui {
 
         info.original_width = info.initial_width;
         info.original_height = info.initial_height;
+        if (info.space == PanelSpace::Floating)
+            resetFloatingPanelSize(info, floatingUiScale());
 
         if (disabled_overrides_.contains(info.id))
             info.enabled = false;
@@ -266,8 +288,9 @@ namespace lfs::vis::gui {
         std::vector<FloatingDirectLayout> floating_direct_layouts(snapshots.size());
         int hovered_floating_direct = -1;
 
-        constexpr float kTitleH = 28.0f;
-        constexpr float kResizeEdge = 6.0f;
+        const float dpi = floatingUiScale();
+        const float kTitleH = 30.0f * dpi;
+        const float kResizeEdge = floatingResizeEdge();
         constexpr float kVisibleFrac = 0.1f;
 
         auto with_panel_input = [&](IPanel* panel, auto&& draw_fn) {
@@ -293,7 +316,10 @@ namespace lfs::vis::gui {
             if (!vp)
                 return;
 
-            float w = snap.initial_width > 0 ? snap.initial_width : 560.0f;
+            const float min_panel_width = 320.0f * dpi;
+            const float max_panel_width = std::max(min_panel_width, vp->WorkSize.x);
+            float w = snap.initial_width > 0 ? snap.initial_width : 560.0f * dpi;
+            w = std::clamp(w, min_panel_width, max_panel_width);
             const float max_h = snap.initial_height > 0
                                     ? std::min(snap.initial_height, vp->WorkSize.y)
                                     : vp->WorkSize.y;
@@ -329,7 +355,7 @@ namespace lfs::vis::gui {
                 } else if (snap.initial_height > 0) {
                     h = snap.initial_height;
                 } else {
-                    h = 400.0f;
+                    h = 400.0f * dpi;
                 }
             }
 
@@ -436,8 +462,8 @@ namespace lfs::vis::gui {
                         float drawn_h = layout.drawn_height;
                         bool has_user_height = layout.has_user_height;
 
-                        constexpr float kMinPanelWidth = 300.0f;
-                        constexpr float kMinPanelHeight = 150.0f;
+                        const float kMinPanelWidth = 320.0f * dpi;
+                        const float kMinPanelHeight = 180.0f * dpi;
 
                         {
                             std::lock_guard lock(mutex_);
@@ -662,7 +688,7 @@ namespace lfs::vis::gui {
     }
 
     bool PanelRegistry::isPositionOverFloatingPanel(const double x, const double y) const {
-        constexpr double kResizeEdge = 6.0;
+        const double kResizeEdge = static_cast<double>(floatingResizeEdge());
         const double rounding = std::max(0.0f, theme().sizes.window_rounding);
 
         std::lock_guard lock(mutex_);
@@ -906,9 +932,7 @@ namespace lfs::vis::gui {
                 if (enabled && p.space == PanelSpace::Floating) {
                     p.float_x = NAN;
                     p.float_y = NAN;
-                    p.initial_width = p.original_width;
-                    p.initial_height = p.original_height;
-                    p.float_user_height = 0;
+                    resetFloatingPanelSize(p, floatingUiScale());
                     bring_floating_panel_to_front_locked(p);
                 } else if (!enabled) {
                     p.float_last_bounds_valid = false;
@@ -943,6 +967,40 @@ namespace lfs::vis::gui {
                 return p.enabled;
         }
         return false;
+    }
+
+    void PanelRegistry::rescale_floating_panels(float previous_scale, float new_scale) {
+        previous_scale = std::max(previous_scale, 1.0f);
+        new_scale = std::max(new_scale, 1.0f);
+        if (std::abs(previous_scale - new_scale) < 0.001f)
+            return;
+
+        const float ratio = new_scale / previous_scale;
+
+        std::lock_guard lock(mutex_);
+        for (auto& p : panels_) {
+            if (p.space != PanelSpace::Floating)
+                continue;
+
+            if (p.initial_width > 0.0f)
+                p.initial_width = std::round(p.initial_width * ratio);
+            else if (p.original_width > 0.0f)
+                p.initial_width = scaledFloatingDimensionForScale(p.original_width, new_scale);
+
+            if (p.initial_height > 0.0f)
+                p.initial_height = std::round(p.initial_height * ratio);
+            else if (p.original_height > 0.0f)
+                p.initial_height = scaledFloatingDimensionForScale(p.original_height, new_scale);
+
+            if (p.float_user_height > 0.0f)
+                p.float_user_height = std::max(1.0f, std::round(p.float_user_height * ratio));
+
+            p.float_dragging = false;
+            p.float_resizing = false;
+            p.float_resize_dir_x = 0;
+            p.float_resize_dir_y = 0;
+            p.float_last_bounds_valid = false;
+        }
     }
 
     bool PanelRegistry::needsAnimationFrame() const {
@@ -989,7 +1047,19 @@ namespace lfs::vis::gui {
             if (p.id == id) {
                 if (!validatePanelContract(p, new_space))
                     return false;
+                const bool was_floating = p.space == PanelSpace::Floating;
                 p.space = new_space;
+                if (!was_floating && new_space == PanelSpace::Floating) {
+                    p.float_x = NAN;
+                    p.float_y = NAN;
+                    resetFloatingPanelSize(p, floatingUiScale());
+                    bring_floating_panel_to_front_locked(p);
+                } else if (was_floating && new_space != PanelSpace::Floating) {
+                    p.initial_width = p.original_width;
+                    p.initial_height = p.original_height;
+                    p.float_user_height = 0.0f;
+                    p.float_last_bounds_valid = false;
+                }
                 ensure_float_stack_order_locked(p);
                 return true;
             }

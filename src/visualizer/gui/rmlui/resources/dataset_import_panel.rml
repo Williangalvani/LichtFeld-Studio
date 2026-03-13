@@ -34,16 +34,24 @@
 
     <div class="separator"></div>
 
-    <div class="impdlg-field-row">
+    <div class="impdlg-control-group">
       <span class="impdlg-field-label text-muted">@tr:load_dataset_popup.output_dir</span>
-      <input type="text" class="impdlg-input" data-value="output_path" />
-      <button type="button" class="btn btn--secondary impdlg-browse-btn" data-event-click="browse_output">@tr:common.browse</button>
+      <div class="impdlg-control-main">
+        <div class="impdlg-control-row">
+          <input type="text" class="impdlg-input" data-value="output_path" />
+          <button type="button" class="btn btn--secondary impdlg-browse-btn" data-event-click="browse_output">@tr:common.browse</button>
+        </div>
+      </div>
     </div>
 
-    <div class="impdlg-field-row">
+    <div class="impdlg-control-group">
       <span class="impdlg-field-label text-muted">@tr:load_dataset_popup.init_file</span>
-      <input type="text" class="impdlg-input" data-value="init_path" />
-      <button type="button" class="btn btn--secondary impdlg-browse-btn" data-event-click="browse_init">@tr:common.browse</button>
+      <div class="impdlg-control-main">
+        <div class="impdlg-control-row">
+          <input type="text" class="impdlg-input" data-value="init_path" />
+          <button type="button" class="btn btn--secondary impdlg-browse-btn" data-event-click="browse_init">@tr:common.browse</button>
+        </div>
+      </div>
     </div>
 
     <span class="impdlg-note text-muted">@tr:load_dataset_popup.help_text</span>

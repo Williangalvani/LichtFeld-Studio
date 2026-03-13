@@ -32,17 +32,25 @@
 
     <div class="separator"></div>
 
-    <div class="impdlg-field-row">
+    <div class="impdlg-control-group">
       <span class="impdlg-field-label text-muted">@tr:resume_checkpoint_popup.dataset_path</span>
-      <input type="text" class="impdlg-input" data-value="dataset_path" />
-      <button type="button" class="btn btn--secondary impdlg-browse-btn" data-event-click="browse_dataset">@tr:common.browse</button>
-      <span data-attr-class="dataset_status_class">{{dataset_status_text}}</span>
+      <div class="impdlg-control-main">
+        <div class="impdlg-control-row">
+          <input type="text" class="impdlg-input" data-value="dataset_path" />
+          <button type="button" class="btn btn--secondary impdlg-browse-btn" data-event-click="browse_dataset">@tr:common.browse</button>
+        </div>
+        <span data-attr-class="dataset_status_class">{{dataset_status_text}}</span>
+      </div>
     </div>
 
-    <div class="impdlg-field-row">
+    <div class="impdlg-control-group">
       <span class="impdlg-field-label text-muted">@tr:resume_checkpoint_popup.output_path</span>
-      <input type="text" class="impdlg-input" data-value="output_path" />
-      <button type="button" class="btn btn--secondary impdlg-browse-btn" data-event-click="browse_output">@tr:common.browse</button>
+      <div class="impdlg-control-main">
+        <div class="impdlg-control-row">
+          <input type="text" class="impdlg-input" data-value="output_path" />
+          <button type="button" class="btn btn--secondary impdlg-browse-btn" data-event-click="browse_output">@tr:common.browse</button>
+        </div>
+      </div>
     </div>
 
     <span class="impdlg-note text-muted">@tr:resume_checkpoint_popup.help_text</span>

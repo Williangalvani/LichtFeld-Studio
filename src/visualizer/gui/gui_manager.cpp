@@ -377,10 +377,12 @@ namespace lfs::vis::gui {
 
     void GuiManager::applyUiScale(float scale) {
         scale = std::clamp(scale, 1.0f, 4.0f);
+        const float previous_scale = current_ui_scale_;
 
         rmlui_manager_.setDpRatio(scale);
         lfs::vis::setThemeDpiScale(scale);
         lfs::python::set_shared_dpi_scale(scale);
+        PanelRegistry::instance().rescale_floating_panels(previous_scale, scale);
         applyDefaultStyle();
         rebuildFonts(scale);
         current_ui_scale_ = scale;

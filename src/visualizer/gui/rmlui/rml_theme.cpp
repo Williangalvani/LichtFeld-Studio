@@ -431,12 +431,10 @@ namespace lfs::vis::gui::rml_theme {
             const auto inset = std::format(", {} 0dp 0dp 0dp 1dp inset",
                                            colorToRmlAlpha(p.surface_bright, 0.35f));
             return std::format(
-                "#window-frame {{ box-shadow: {}{}; }}\n"
                 ".context-menu {{ box-shadow: {}; }}\n"
                 "selectbox {{ box-shadow: {}; }}\n"
                 ".modal-dialog {{ box-shadow: {}{}; }}\n"
                 ".confirm-dialog {{ box-shadow: {}{}; }}\n",
-                layeredShadow(t, 2), inset,
                 layeredShadow(t, 3),
                 layeredShadow(t, 1),
                 layeredShadow(t, 4), inset,

@@ -230,6 +230,7 @@ namespace lfs::vis::gui {
         void set_panel_enabled(const std::string& id, bool enabled);
         void set_panel_disabled_override(const std::string& id);
         bool is_panel_enabled(const std::string& id) const;
+        void rescale_floating_panels(float previous_scale, float new_scale);
         bool needsAnimationFrame() const;
         bool set_panel_label(const std::string& id, const std::string& new_label);
         bool set_panel_order(const std::string& id, int new_order);
