@@ -4,22 +4,22 @@
 
 #pragma once
 
-#include "core/export.hpp"
 #include "camera_interaction_service.hpp"
+#include "core/export.hpp"
 #include "dirty_flags.hpp"
 #include "framerate_controller.hpp"
-#include "internal/viewport.hpp"
 #include "gt_texture_cache.hpp"
-#include "render_pass_graph.hpp"
+#include "internal/viewport.hpp"
 #include "render_animation_state.hpp"
+#include "render_pass_graph.hpp"
+#include "rendering/cuda_gl_interop.hpp"
+#include "rendering/rendering.hpp"
+#include "rendering_types.hpp"
 #include "split_view_service.hpp"
 #include "viewport_artifact_service.hpp"
 #include "viewport_frame_lifecycle_service.hpp"
 #include "viewport_interaction_context.hpp"
 #include "viewport_overlay_service.hpp"
-#include "rendering/cuda_gl_interop.hpp"
-#include "rendering/rendering.hpp"
-#include "rendering_types.hpp"
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -39,7 +39,7 @@ namespace lfs::core::events::ui {
     struct GridSettingsChanged;
     struct PointCloudModeChanged;
     struct RenderSettingsChanged;
-}
+} // namespace lfs::core::events::ui
 
 namespace lfs::vis {
     class SceneManager;

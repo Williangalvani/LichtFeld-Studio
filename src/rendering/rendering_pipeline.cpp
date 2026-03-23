@@ -30,11 +30,7 @@ namespace lfs::rendering {
                           .texcoord_scale = {
                               alloc_size.x > 0 ? static_cast<float>(render_size.x) / static_cast<float>(alloc_size.x) : 1.0f,
                               alloc_size.y > 0 ? static_cast<float>(render_size.y) / static_cast<float>(alloc_size.y) : 1.0f}},
-                .depth = {.id = depth_texture,
-                          .size = alloc_size,
-                          .texcoord_scale = {
-                              alloc_size.x > 0 ? static_cast<float>(render_size.x) / static_cast<float>(alloc_size.x) : 1.0f,
-                              alloc_size.y > 0 ? static_cast<float>(render_size.y) / static_cast<float>(alloc_size.y) : 1.0f}},
+                .depth = {.id = depth_texture, .size = alloc_size, .texcoord_scale = {alloc_size.x > 0 ? static_cast<float>(render_size.x) / static_cast<float>(alloc_size.x) : 1.0f, alloc_size.y > 0 ? static_cast<float>(render_size.y) / static_cast<float>(alloc_size.y) : 1.0f}},
                 .depth_is_ndc = true,
                 .near_plane = DEFAULT_NEAR_PLANE,
                 .far_plane = far_plane,

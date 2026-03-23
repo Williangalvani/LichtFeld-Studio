@@ -80,8 +80,8 @@ namespace lfs::vis {
                          .transform = glm::inverse(el.world_transform)},
                     .inverse = el.data->inverse,
                     .desaturate = ctx.settings.show_ellipsoid &&
-                                   !ctx.settings.use_ellipsoid &&
-                                   ctx.settings.desaturate_cropping,
+                                  !ctx.settings.use_ellipsoid &&
+                                  ctx.settings.desaturate_cropping,
                     .parent_node_index = scene.getVisibleNodeIndex(el.parent_splat_id)};
                 return;
             }

@@ -129,7 +129,7 @@ namespace lfs::vis {
                                          const lfs::core::PointCloud& point_cloud,
                                          const std::vector<glm::mat4>& pc_transforms,
                                          const lfs::rendering::PointCloudRenderRequest& request,
-        const glm::ivec2 render_size) {
+                                         const glm::ivec2 render_size) {
         auto request_for_texture = request;
         request_for_texture.frame_view.size = render_size;
         request_for_texture.scene.model_transforms = &pc_transforms;

@@ -9,8 +9,8 @@
 #include "render_target_pool.hpp"
 #include "rendering/rendering.hpp"
 #include "rendering_pipeline.hpp"
-#include "shader_manager.hpp"
 #include "screen_renderer.hpp"
+#include "shader_manager.hpp"
 #include <array>
 #include <memory>
 #include <optional>

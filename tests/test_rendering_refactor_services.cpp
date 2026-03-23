@@ -7,19 +7,18 @@
 #include "core/point_cloud.hpp"
 #include "core/services.hpp"
 #include "core/tensor.hpp"
-#include "visualizer/rendering/rendering_manager.hpp"
-#include "visualizer/rendering/render_pass.hpp"
 #include "visualizer/rendering/passes/mesh_pass.hpp"
 #include "visualizer/rendering/passes/point_cloud_pass.hpp"
 #include "visualizer/rendering/passes/splat_raster_pass.hpp"
 #include "visualizer/rendering/render_pass.hpp"
+#include "visualizer/rendering/rendering_manager.hpp"
 #include "visualizer/rendering/split_view_service.hpp"
 #include "visualizer/rendering/viewport_artifact_service.hpp"
 #include "visualizer/rendering/viewport_frame_lifecycle_service.hpp"
 #include "visualizer/scene/scene_manager.hpp"
 
-#include <gtest/gtest.h>
 #include <filesystem>
+#include <gtest/gtest.h>
 #include <vector>
 
 namespace lfs::vis {

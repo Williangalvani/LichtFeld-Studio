@@ -262,8 +262,8 @@ namespace lfs::rendering {
 
         // Preview-selection tensor (used by rectangle/lasso/polygon modes regardless of cursor state)
         bool* const preview_selection_ptr = (preview_selection_out && preview_selection_out->is_valid())
-                                              ? preview_selection_out->ptr<bool>()
-                                              : nullptr;
+                                                ? preview_selection_out->ptr<bool>()
+                                                : nullptr;
 
         // Prepare crop box parameters
         const float* crop_box_transform_ptr = nullptr;

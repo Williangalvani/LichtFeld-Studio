@@ -32,12 +32,12 @@ namespace lfs::vis {
 
             const float flash_intensity = ctx.selection_flash_intensity;
             const bool any_emphasized = std::any_of(
-                                          scene_state.meshes.begin(), scene_state.meshes.end(),
-                                          [](const auto& vm) { return vm.is_selected; }) ||
-                                      (!scene_state.selected_node_mask.empty() &&
-                                       std::any_of(scene_state.selected_node_mask.begin(),
-                                                   scene_state.selected_node_mask.end(),
-                                                   [](bool b) { return b; }));
+                                            scene_state.meshes.begin(), scene_state.meshes.end(),
+                                            [](const auto& vm) { return vm.is_selected; }) ||
+                                        (!scene_state.selected_node_mask.empty() &&
+                                         std::any_of(scene_state.selected_node_mask.begin(),
+                                                     scene_state.selected_node_mask.end(),
+                                                     [](bool b) { return b; }));
 
             const lfs::rendering::MeshRenderOptions mesh_opts{
                 .wireframe_overlay = ctx.settings.mesh_wireframe,

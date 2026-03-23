@@ -108,8 +108,8 @@ namespace lfs::rendering {
         }
 
         void applyViewVolumeToPipeline(RenderingPipeline::RasterRequest& pipeline_req,
-                                        const std::optional<BoundingBox>& view_volume,
-                                        GaussianRasterResources& resources) {
+                                       const std::optional<BoundingBox>& view_volume,
+                                       GaussianRasterResources& resources) {
             if (!view_volume.has_value()) {
                 return;
             }

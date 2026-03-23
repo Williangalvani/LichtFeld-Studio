@@ -6,8 +6,8 @@
 #include "core/logger.hpp"
 #include "core/tensor.hpp"
 #include "gl_state_guard.hpp"
-#include <glad/glad.h>
 #include <format>
+#include <glad/glad.h>
 #include <vector>
 
 namespace lfs::rendering {

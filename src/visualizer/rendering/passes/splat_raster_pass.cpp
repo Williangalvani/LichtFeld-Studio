@@ -4,8 +4,8 @@
 
 #include "splat_raster_pass.hpp"
 #include "../model_renderability.hpp"
-#include "../viewport_request_builder.hpp"
 #include "../viewport_appearance_correction.hpp"
+#include "../viewport_request_builder.hpp"
 #include "core/logger.hpp"
 #include "core/splat_data.hpp"
 #include <cassert>

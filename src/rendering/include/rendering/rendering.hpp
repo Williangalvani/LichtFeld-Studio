@@ -186,7 +186,7 @@ namespace lfs::rendering {
 
     struct FrameMetadata {
         std::shared_ptr<lfs::core::Tensor> depth;
-        std::shared_ptr<lfs::core::Tensor> depth_right;      // For split view: depth from right panel
+        std::shared_ptr<lfs::core::Tensor> depth_right; // For split view: depth from right panel
         bool valid = false;
         // Depth conversion parameters (needed for proper depth buffer writing)
         bool depth_is_ndc = false;               // True if depth is already NDC (0-1), e.g., from OpenGL

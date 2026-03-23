@@ -192,8 +192,8 @@ namespace lfs::vis::gui {
                          .transform = glm::inverse(cb.world_transform)},
                     .inverse = cb.data.inverse,
                     .desaturate = render_settings.show_crop_box &&
-                                   !render_settings.use_crop_box &&
-                                   render_settings.desaturate_cropping,
+                                  !render_settings.use_crop_box &&
+                                  render_settings.desaturate_cropping,
                     .parent_node_index = cb.parent_node_index};
             }
         }
@@ -207,8 +207,8 @@ namespace lfs::vis::gui {
                      .transform = glm::inverse(ellipsoid.world_transform)},
                 .inverse = ellipsoid.data.inverse,
                 .desaturate = render_settings.show_ellipsoid &&
-                               !render_settings.use_ellipsoid &&
-                               render_settings.desaturate_cropping,
+                              !render_settings.use_ellipsoid &&
+                              render_settings.desaturate_cropping,
                 .parent_node_index = ellipsoid.parent_node_index};
         }
 

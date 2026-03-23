@@ -2,10 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-#include "rendering_manager.hpp"
 #include "core/events.hpp"
 #include "core/logger.hpp"
 #include "core/services.hpp"
+#include "rendering_manager.hpp"
 
 namespace lfs::vis {
 

@@ -2,13 +2,13 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-#include "rendering_manager.hpp"
 #include "core/logger.hpp"
-#include "core/tensor.hpp"
 #include "core/splat_data.hpp"
+#include "core/tensor.hpp"
 #include "model_renderability.hpp"
 #include "render_frame_coordinator.hpp"
 #include "rendering/rasterizer/rasterization/include/rasterization_config.h"
+#include "rendering_manager.hpp"
 #include "scene/scene_manager.hpp"
 #include "theme/theme.hpp"
 #include "training/trainer.hpp"
@@ -169,7 +169,7 @@ namespace lfs::vis {
 
         viewport_interaction_context_.scene_manager = scene_manager;
         viewport_interaction_context_.updatePickContext(context.viewport_region,
-                                                       viewport_interaction_context_.viewport_data);
+                                                        viewport_interaction_context_.viewport_data);
     }
 
 } // namespace lfs::vis

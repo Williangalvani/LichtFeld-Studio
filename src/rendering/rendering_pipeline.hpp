@@ -11,9 +11,9 @@
 #include "geometry/bounding_box.hpp"
 #include "gl_resources.hpp"
 #include "point_cloud_renderer.hpp"
+#include "render_target_pool.hpp"
 #include "rendering/render_constants.hpp"
 #include "rendering/rendering.hpp"
-#include "render_target_pool.hpp"
 #include "screen_renderer.hpp"
 #include <glm/glm.hpp>
 #include <optional>

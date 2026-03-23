@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "split_view_pass.hpp"
-#include "core/logger.hpp"
 #include "../viewport_request_builder.hpp"
+#include "core/logger.hpp"
 #include "scene/scene_manager.hpp"
 #include <cassert>
 
@@ -102,31 +102,31 @@ namespace lfs::vis {
                 .panels =
                     std::array<lfs::rendering::SplitViewPanel, 2>{
                         lfs::rendering::SplitViewPanel{
-                         .content =
-                             {.type = lfs::rendering::PanelContentType::Image2D,
-                              .model = nullptr,
-                              .model_transform = glm::mat4(1.0f),
-                              .gaussian_render = std::nullopt,
-                              .point_cloud_render = std::nullopt,
-                              .texture_id = res.gt_context->gt_texture_id},
-                         .presentation =
-                             {.start_position = 0.0f,
-                              .end_position = settings.split_position,
-                              .texcoord_scale = res.gt_context->gt_texcoord_scale,
-                              .flip_y = res.gt_context->gt_needs_flip}},
+                            .content =
+                                {.type = lfs::rendering::PanelContentType::Image2D,
+                                 .model = nullptr,
+                                 .model_transform = glm::mat4(1.0f),
+                                 .gaussian_render = std::nullopt,
+                                 .point_cloud_render = std::nullopt,
+                                 .texture_id = res.gt_context->gt_texture_id},
+                            .presentation =
+                                {.start_position = 0.0f,
+                                 .end_position = settings.split_position,
+                                 .texcoord_scale = res.gt_context->gt_texcoord_scale,
+                                 .flip_y = res.gt_context->gt_needs_flip}},
                         lfs::rendering::SplitViewPanel{
-                         .content =
-                             {.type = lfs::rendering::PanelContentType::CachedRender,
-                              .model = nullptr,
-                              .model_transform = glm::mat4(1.0f),
-                              .gaussian_render = std::nullopt,
-                              .point_cloud_render = std::nullopt,
-                              .texture_id = rendered_texture},
-                         .presentation =
-                             {.start_position = settings.split_position,
-                              .end_position = 1.0f,
-                              .texcoord_scale = rendered_texcoord_scale,
-                              .flip_y = std::nullopt}}},
+                            .content =
+                                {.type = lfs::rendering::PanelContentType::CachedRender,
+                                 .model = nullptr,
+                                 .model_transform = glm::mat4(1.0f),
+                                 .gaussian_render = std::nullopt,
+                                 .point_cloud_render = std::nullopt,
+                                 .texture_id = rendered_texture},
+                            .presentation =
+                                {.start_position = settings.split_position,
+                                 .end_position = 1.0f,
+                                 .texcoord_scale = rendered_texcoord_scale,
+                                 .flip_y = std::nullopt}}},
                 .composite =
                     {.output_size = letterbox_viewport.size,
                      .background_color = settings.background_color},
@@ -180,9 +180,7 @@ namespace lfs::vis {
                              .end_position = 1.0f,
                              .texcoord_scale = texcoord_scale,
                              .flip_y = std::nullopt}}},
-                .composite =
-                    {.output_size = viewport_data.size,
-                     .background_color = settings.background_color},
+                .composite = {.output_size = viewport_data.size, .background_color = settings.background_color},
                 .presentation = {.divider_color = glm::vec4(1.0f, 0.85f, 0.0f, 1.0f)}};
         }
 

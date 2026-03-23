@@ -7,8 +7,8 @@
 #include "core/logger.hpp"
 #include "core/path_utils.hpp"
 #include "core/tensor.hpp"
-#include "io/pipelined_image_loader.hpp"
 #include "io/nvcodec_image_loader.hpp"
+#include "io/pipelined_image_loader.hpp"
 #include <algorithm>
 #include <cstring>
 #include <glad/glad.h>
