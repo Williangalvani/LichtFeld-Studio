@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "rendering_types.hpp"
 #include "core/export.hpp"
+#include "rendering_types.hpp"
 #include <mutex>
 #include <optional>
 

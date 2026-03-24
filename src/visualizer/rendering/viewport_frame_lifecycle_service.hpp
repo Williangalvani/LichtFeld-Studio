@@ -4,9 +4,9 @@
 
 #pragma once
 
+#include "core/export.hpp"
 #include "dirty_flags.hpp"
 #include "rendering_types.hpp"
-#include "core/export.hpp"
 #include <atomic>
 #include <chrono>
 #include <utility>
