@@ -209,6 +209,7 @@ namespace lfs::core {
         struct LFS_CORE_API DatasetConfig {
             std::filesystem::path data_path = "";
             std::filesystem::path output_path = "";
+            std::string output_name = "";
             std::string images = "images";
             int resize_factor = -1;
             int test_every = 8;
