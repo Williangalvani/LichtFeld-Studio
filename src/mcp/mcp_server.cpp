@@ -24,31 +24,28 @@ namespace lfs::mcp {
             if (const auto mime_type = string_field(result, "mime_type")) {
                 if (mime_type->starts_with("image/")) {
                     if (const auto data = string_field(result, "data")) {
-                        return json::array({
-                            json{
-                                {"type", "image"},
-                                {"mimeType", *mime_type},
-                                {"data", *data},
-                            }});
+                        return json::array({json{
+                            {"type", "image"},
+                            {"mimeType", *mime_type},
+                            {"data", *data},
+                        }});
                     }
                 }
 
                 if (mime_type->starts_with("text/")) {
                     if (const auto text = string_field(result, "text")) {
-                        return json::array({
-                            json{
-                                {"type", "text"},
-                                {"text", *text},
-                            }});
+                        return json::array({json{
+                            {"type", "text"},
+                            {"text", *text},
+                        }});
                     }
                 }
             }
 
-            return json::array({
-                json{
-                    {"type", "text"},
-                    {"text", result.dump(2)},
-                }});
+            return json::array({json{
+                {"type", "text"},
+                {"text", result.dump(2)},
+            }});
         }
 
     } // namespace
