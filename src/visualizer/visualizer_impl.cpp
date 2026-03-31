@@ -50,6 +50,12 @@ namespace lfs::vis {
 
         constexpr float kMinSetViewVectorLength = 1e-6f;
 
+        void wakeEventLoopViaServices() {
+            if (auto* const window_manager = services().windowOrNull()) {
+                window_manager->wakeEventLoop();
+            }
+        }
+
         bool isFiniteVec3(const glm::vec3& v) {
             return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
         }
@@ -265,12 +271,8 @@ namespace lfs::vis {
         callback_cleanup_.add([] { python::set_operator_callbacks(nullptr); });
         python::set_gui_manager(gui_manager_.get());
         callback_cleanup_.add([] { python::set_gui_manager(nullptr); });
-        python::set_redraw_wakeup_callback([]() {
-            SDL_Event event{};
-            event.type = SDL_EVENT_USER;
-            SDL_PushEvent(&event);
-        });
-        callback_cleanup_.add([] { python::set_redraw_wakeup_callback(nullptr); });
+        python::set_main_loop_wake_callback(&wakeEventLoopViaServices);
+        callback_cleanup_.add([] { python::set_main_loop_wake_callback(nullptr); });
         python::set_mesh2splat_callbacks(
             [](std::shared_ptr<core::MeshData> mesh, std::string name, core::Mesh2SplatOptions opts) {
                 auto* gm = python::get_gui_manager();
@@ -773,15 +775,11 @@ namespace lfs::vis {
         state::SceneChanged::when([this](const auto& event) {
             python::set_scene_mutation_flags(event.mutation_flags);
             python::bump_scene_generation();
-            if (window_manager_) {
-                window_manager_->requestRedraw();
-            }
+            wakeMainLoop();
         });
 
         ui::PointCloudModeChanged::when([this](const auto&) {
-            if (window_manager_) {
-                window_manager_->requestRedraw();
-            }
+            wakeMainLoop();
         });
 
         ui::AppearanceModelLoaded::when([this](const auto& e) {
@@ -1320,6 +1318,11 @@ namespace lfs::vis {
         data_loader_->clearScene();
     }
 
+    void VisualizerImpl::wakeMainLoop() const {
+        if (window_manager_)
+            window_manager_->wakeEventLoop();
+    }
+
     bool VisualizerImpl::postWork(WorkItem work) {
         {
             std::lock_guard lock(work_queue_mutex_);
@@ -1328,8 +1331,7 @@ namespace lfs::vis {
             work_queue_.push_back(std::move(work));
         }
 
-        if (window_manager_)
-            window_manager_->requestRedraw();
+        wakeMainLoop();
 
         return true;
     }
@@ -1342,8 +1344,7 @@ namespace lfs::vis {
             render_work_queue_.push_back(std::move(work));
         }
 
-        if (window_manager_)
-            window_manager_->requestRedraw();
+        wakeMainLoop();
 
         return true;
     }

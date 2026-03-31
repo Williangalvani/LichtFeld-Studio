@@ -8,7 +8,7 @@
 
 #include <gtest/gtest.h>
 
-TEST(VisualizerPostWorkTest, QueuedWorkRequestsRedraw) {
+TEST(VisualizerPostWorkTest, QueuedWorkWakesEventLoop) {
     ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
     SDL_FlushEvents(SDL_EVENT_USER, SDL_EVENT_USER);
 

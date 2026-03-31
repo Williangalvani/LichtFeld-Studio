@@ -40,7 +40,7 @@ namespace lfs::vis {
         bool shouldClose() const;
         void requestClose() { should_close_ = true; }
         void cancelClose();
-        void requestRedraw();
+        void wakeEventLoop();
 
         SDL_Window* getWindow() const { return window_; }
         SDL_GLContext getGLContext() const { return gl_context_; }
