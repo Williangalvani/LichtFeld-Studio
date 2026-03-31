@@ -207,6 +207,7 @@ set(TEST_FILES
     test_mcp_app_utils.cpp
     test_mcp_sequencer_tools.cpp
     test_video_export_utils.cpp
+    test_visualizer_post_work.cpp
     test_video_color_convert.cpp
     test_python_integration.cpp
     test_python_lsp_client.cpp

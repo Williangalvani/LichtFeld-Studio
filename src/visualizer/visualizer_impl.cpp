@@ -1321,10 +1321,16 @@ namespace lfs::vis {
     }
 
     bool VisualizerImpl::postWork(WorkItem work) {
-        std::lock_guard lock(work_queue_mutex_);
-        if (!accepting_work_)
-            return false;
-        work_queue_.push_back(std::move(work));
+        {
+            std::lock_guard lock(work_queue_mutex_);
+            if (!accepting_work_)
+                return false;
+            work_queue_.push_back(std::move(work));
+        }
+
+        if (window_manager_)
+            window_manager_->requestRedraw();
+
         return true;
     }
 

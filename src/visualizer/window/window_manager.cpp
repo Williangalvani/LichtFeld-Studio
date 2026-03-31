@@ -204,18 +204,9 @@ namespace lfs::vis {
     }
 
     void WindowManager::requestRedraw() {
-        needs_redraw_ = true;
         SDL_Event event{};
         event.type = SDL_EVENT_USER;
         SDL_PushEvent(&event);
-    }
-
-    bool WindowManager::needsRedraw() const {
-        bool result = needs_redraw_;
-        if (result) {
-            needs_redraw_ = false;
-        }
-        return result;
     }
 
     void WindowManager::processEvent(const SDL_Event& event) {
