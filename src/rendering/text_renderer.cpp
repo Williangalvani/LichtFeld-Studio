@@ -6,8 +6,8 @@
 #include "core/logger.hpp"
 #include "core/path_utils.hpp"
 #include "gl_state_guard.hpp"
-#include <format>
 #include <array>
+#include <format>
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
