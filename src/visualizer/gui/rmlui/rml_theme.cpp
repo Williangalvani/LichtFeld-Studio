@@ -260,8 +260,8 @@ namespace lfs::vis::gui::rml_theme {
         const int scrollbar_size = static_cast<int>(t.sizes.scrollbar_size);
         const int scrollbar_min = static_cast<int>(t.sizes.grab_min_size);
         const int scrollbar_rounding = std::max(1, static_cast<int>(std::max(
-            t.sizes.scrollbar_rounding,
-            t.sizes.scrollbar_size * 0.5f)));
+                                                       t.sizes.scrollbar_rounding,
+                                                       t.sizes.scrollbar_size * 0.5f)));
         const auto border_soft = colorToRmlAlpha(p.border, 0.3f);
         const auto border_med = colorToRmlAlpha(p.border, 0.5f);
         const auto text_hi = colorToRmlAlpha(p.text, 0.9f);
