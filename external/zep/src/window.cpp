@@ -284,12 +284,32 @@ namespace Zep {
                 SetBufferCursor(m_mouseIterator);
             }
         } else if (payload->messageId == Msg::MouseWheel) {
-            /* TBD: From PR #106: this does not work correctly: It scrolls the text off the page
-            * completely at the bottom
-            m_textOffsetPx = std::min(m_textSizePx.y, std::max(0.0f, m_textOffsetPx - 5 * stof(payload->str) * GetEditor().GetDisplay().GetFont(ZepTextType::Text).GetPixelHeight()));
+            if (!m_bufferRegion->rect.Contains(payload->pos)) {
+                return;
+            }
+
+            payload->handled = true;
+
+            const float maxScrollOffset =
+                std::max(0.0f, m_textSizePx.y - m_textRegion->rect.Height());
+            if (maxScrollOffset <= 0.0f) {
+                return;
+            }
+
+            const float scrollDistance = std::stof(payload->str);
+            if (scrollDistance == 0.0f) {
+                return;
+            }
+
+            const float lineHeight =
+                GetEditor().GetDisplay().GetFont(ZepTextType::Text).GetPixelHeight();
+            constexpr float wheelLines = 4.0f;
+            m_textOffsetPx = std::clamp(
+                m_textOffsetPx - wheelLines * scrollDistance * lineHeight,
+                0.0f,
+                maxScrollOffset);
             UpdateVisibleLineRange();
             DisableToolTipTillMove();
-            */
         }
     }
 
