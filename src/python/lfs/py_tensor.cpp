@@ -106,6 +106,26 @@ namespace lfs::python {
             }
         }
 
+        template <typename Getter>
+        nb::object build_nested_list(const std::vector<size_t>& dims, size_t dim, size_t& offset, const Getter& getter) {
+            if (dims.empty()) {
+                return getter(offset++);
+            }
+
+            nb::list result;
+            if (dim + 1 == dims.size()) {
+                for (size_t i = 0; i < dims[dim]; ++i) {
+                    result.append(getter(offset++));
+                }
+                return result;
+            }
+
+            for (size_t i = 0; i < dims[dim]; ++i) {
+                result.append(build_nested_list(dims, dim + 1, offset, getter));
+            }
+            return result;
+        }
+
     } // namespace
 
     PyTensor::PyTensor(Tensor tensor, bool owns_data)
@@ -440,6 +460,47 @@ namespace lfs::python {
                 throw std::runtime_error("Unsupported dtype for numpy conversion");
             }
         }
+    }
+
+    nb::object PyTensor::tolist() const {
+        validate();
+        Tensor cpu_tensor = tensor_.device() == Device::CUDA ? tensor_.cpu() : tensor_;
+        if (!cpu_tensor.is_contiguous()) {
+            cpu_tensor = cpu_tensor.contiguous();
+        }
+
+        const auto& dims = cpu_tensor.shape().dims();
+        size_t offset = 0;
+
+        switch (cpu_tensor.dtype()) {
+        case DataType::Float32: {
+            const auto values = cpu_tensor.to_vector();
+            return build_nested_list(dims, 0, offset, [&](size_t index) { return nb::cast(values[index]); });
+        }
+        case DataType::Int32: {
+            const auto values = cpu_tensor.to_vector_int();
+            return build_nested_list(dims, 0, offset, [&](size_t index) { return nb::cast(values[index]); });
+        }
+        case DataType::Int64: {
+            const auto values = cpu_tensor.to_vector_int64();
+            return build_nested_list(dims, 0, offset, [&](size_t index) { return nb::cast(values[index]); });
+        }
+        case DataType::UInt8: {
+            const auto values = cpu_tensor.to_vector_uint8();
+            return build_nested_list(dims, 0, offset, [&](size_t index) { return nb::cast(values[index]); });
+        }
+        case DataType::Bool: {
+            const auto values = cpu_tensor.to_vector_bool();
+            return build_nested_list(dims, 0, offset, [&](size_t index) { return nb::cast(static_cast<bool>(values[index])); });
+        }
+        default:
+            throw std::runtime_error("Unsupported dtype for tolist conversion");
+        }
+    }
+
+    size_t PyTensor::count_nonzero() const {
+        validate();
+        return tensor_.count_nonzero();
     }
 
     PyTensor PyTensor::from_numpy(nb::ndarray<> arr, bool copy) {
@@ -1069,6 +1130,11 @@ namespace lfs::python {
         return tensor_.norm(p);
     }
 
+    nb::tuple PyTensor::sort(int dim, bool descending) const {
+        auto [values, indices] = tensor_.sort(dim, descending);
+        return nb::make_tuple(PyTensor(std::move(values), true), PyTensor(std::move(indices), true));
+    }
+
     // Shape operations
     PyTensor PyTensor::reshape(const std::vector<int64_t>& new_shape) const {
         std::vector<int> shape_vec;
@@ -1530,6 +1596,8 @@ namespace lfs::python {
             // NumPy conversion
             .def("numpy", &PyTensor::numpy, nb::arg("copy") = true,
                  "Convert to NumPy array")
+            .def("tolist", &PyTensor::tolist, "Convert tensor to nested Python lists")
+            .def("count_nonzero", &PyTensor::count_nonzero, "Count non-zero elements")
             .def_static("from_numpy", &PyTensor::from_numpy,
                         nb::arg("arr"), nb::arg("copy") = true,
                         "Create tensor from NumPy array")
@@ -1696,6 +1764,8 @@ namespace lfs::python {
             .def("any", &PyTensor::any, nb::arg("dim") = nb::none(), nb::arg("keepdim") = false, "Check if any true")
             .def("norm", &PyTensor::norm, nb::arg("p") = 2.0f, "Lp norm")
             .def("norm_scalar", &PyTensor::norm_scalar, nb::arg("p") = 2.0f, "Lp norm as scalar")
+            .def("sort", &PyTensor::sort, nb::arg("dim") = -1, nb::arg("descending") = false,
+                 "Sort tensor values along a dimension and return (values, indices)")
 
             // Advanced indexing
             .def("index_select", &PyTensor::index_select, nb::arg("dim"), nb::arg("indices"), "Select along dimension by indices")

@@ -7,8 +7,6 @@ from __future__ import annotations
 import math
 from typing import Iterable
 
-import numpy as np
-
 import lichtfeld as lf
 
 from .histogram_support import METRICS, METRIC_BY_ID, histogram_mode_available, histogram_tr
@@ -64,11 +62,11 @@ class HistogramPanel(Panel):
         self._axis_max = "--"
         self._summary_text = ""
 
-        self._cached_values: np.ndarray | None = None
-        self._visible_mask: np.ndarray | None = None
-        self._hist_counts: np.ndarray | None = None
-        self._hist_edges: np.ndarray | None = None
-        self._applied_selection_values: np.ndarray | None = None
+        self._cached_values: lf.Tensor | None = None
+        self._visible_mask: lf.Tensor | None = None
+        self._hist_counts: list[int] | None = None
+        self._hist_edges: list[float] | None = None
+        self._applied_selection_values: lf.Tensor | None = None
 
         self._dragging_mark = False
         self._marked_bin_start: int | None = None
@@ -263,9 +261,11 @@ class HistogramPanel(Panel):
             return
 
         visible_mask = self._extract_visible_mask(model, values.shape[0])
-        visible_values = values[visible_mask]
-        finite_values = visible_values[np.isfinite(visible_values)]
-        if finite_values.size == 0:
+        finite_mask = values.isfinite()
+        if visible_mask is not None and visible_mask.shape == values.shape:
+            finite_mask = finite_mask & visible_mask
+
+        if not self._any_true(finite_mask):
             self._set_empty(
                 _tr("histogram.empty.no_visible_values.title", "No visible values"),
                 _tr(
@@ -275,30 +275,32 @@ class HistogramPanel(Panel):
             )
             return
 
+        finite_values = values[finite_mask].contiguous().cpu().to("float32")
         metric = METRIC_BY_ID[self._metric_id]
         histogram_min, histogram_max = self._histogram_bounds(finite_values)
-        counts, edges = np.histogram(finite_values, bins=BIN_COUNT, range=(histogram_min, histogram_max))
-        peak_count = int(counts.max()) if counts.size else 0
+        counts, edges = self._build_histogram(finite_values, histogram_min, histogram_max)
+        peak_count = max(counts, default=0)
+        sorted_values, _ = finite_values.sort(0, False)
 
         self._cached_values = values
         self._visible_mask = visible_mask
-        self._hist_counts = counts.astype(np.int64, copy=False)
-        self._hist_edges = edges.astype(np.float32, copy=False)
+        self._hist_counts = counts
+        self._hist_edges = edges
 
         self._show_chart = True
-        self._sample_count = f"{finite_values.size:,}"
-        self._range_text = self._format_range_text(float(finite_values.min()), float(finite_values.max()))
-        self._mean_text = self._format_value(float(np.mean(finite_values)))
-        self._median_text = self._format_value(float(np.median(finite_values)))
-        self._p95_text = self._format_value(float(np.percentile(finite_values, 95.0)))
+        self._sample_count = f"{int(finite_values.shape[0]):,}"
+        self._range_text = self._format_range_text(finite_values.min_scalar(), finite_values.max_scalar())
+        self._mean_text = self._format_value(finite_values.mean_scalar())
+        self._median_text = self._format_value(self._percentile_from_sorted(sorted_values, 50.0))
+        self._p95_text = self._format_value(self._percentile_from_sorted(sorted_values, 95.0))
         self._peak_text = f"{peak_count:,}"
-        self._axis_min = self._format_value(float(edges[0]))
-        self._axis_max = self._format_value(float(edges[-1]))
+        self._axis_min = self._format_value(edges[0])
+        self._axis_max = self._format_value(edges[-1])
         self._summary_text = _trf(
             "histogram.summary",
             "{metric} distribution across {count} Gaussians",
             metric=metric.label(),
-            count=f"{finite_values.size:,}",
+            count=f"{int(finite_values.shape[0]):,}",
         )
 
         if self._has_marked_range():
@@ -331,19 +333,20 @@ class HistogramPanel(Panel):
             self._handle.update_record_list("bins", [])
             self._handle.dirty_all()
 
-    def _build_bin_records(self, counts: np.ndarray, edges: np.ndarray) -> Iterable[dict[str, object]]:
-        display_counts = counts.astype(np.float32, copy=False)
+    def _build_bin_records(self, counts: list[int], edges: list[float]) -> Iterable[dict[str, object]]:
         if self._log_scale_enabled:
-            display_counts = np.log1p(display_counts)
+            display_counts = [math.log1p(float(count)) for count in counts]
+        else:
+            display_counts = [float(count) for count in counts]
 
-        peak = float(max(float(display_counts.max()) if display_counts.size else 0.0, 1.0))
+        peak = max(max(display_counts, default=0.0), 1.0)
         marked_lo, marked_hi = self._marked_bounds()
         for index, count in enumerate(counts):
-            ratio = float(display_counts[index]) / peak
+            ratio = display_counts[index] / peak
             height_pct = 0.0 if count <= 0 else max(3.0, ratio * 100.0)
             alpha = 0.16 if count <= 0 else (0.34 + ratio * 0.66)
-            left = self._format_value(float(edges[index]))
-            right = self._format_value(float(edges[index + 1]))
+            left = self._format_value(edges[index])
+            right = self._format_value(edges[index + 1])
             yield {
                 "height_style": f"{height_pct:.2f}%",
                 "opacity_style": f"{alpha:.3f}",
@@ -366,16 +369,15 @@ class HistogramPanel(Panel):
             list(self._build_bin_records(self._hist_counts, self._hist_edges)),
         )
 
-    def _extract_metric_values(self, scene, model) -> np.ndarray | None:
+    def _extract_metric_values(self, scene, model) -> lf.Tensor | None:
         try:
             if self._metric_id == "opacity":
-                opacity = self._tensor_to_numpy(model.get_opacity())
-                return opacity.reshape(-1)
+                return self._cpu_float_tensor(model.get_opacity()).reshape([-1])
 
             if self._metric_id == "distance":
                 return self._extract_distance_values(scene, model)
 
-            scaling = self._tensor_to_numpy(model.get_scaling()).reshape(-1, 3)
+            scaling = self._cpu_float_tensor(model.get_scaling()).reshape([-1, 3])
             if self._metric_id == "scale_x":
                 return scaling[:, 0]
             if self._metric_id == "scale_y":
@@ -383,27 +385,27 @@ class HistogramPanel(Panel):
             if self._metric_id == "scale_z":
                 return scaling[:, 2]
             if self._metric_id == "scale_max":
-                return scaling.max(axis=1)
+                return scaling.max(1).reshape([-1])
             return None
         except Exception:
             return None
 
-    def _extract_distance_values(self, scene, model) -> np.ndarray:
-        means = self._tensor_to_numpy(model.get_means()).reshape(-1, 3)
-        if means.size == 0:
-            return np.empty((0,), dtype=np.float32)
+    def _extract_distance_values(self, scene, model) -> lf.Tensor:
+        means = self._cpu_float_tensor(model.get_means()).reshape([-1, 3])
+        if means.numel == 0:
+            return lf.Tensor.zeros([0], dtype="float32", device="cpu")
 
         world_means = self._world_space_means(scene, means)
         if world_means is None:
             world_means = means
         return self._distance_from_positions(scene, world_means)
 
-    def _world_space_means(self, scene, means: np.ndarray) -> np.ndarray | None:
+    def _world_space_means(self, scene, means: lf.Tensor) -> lf.Tensor | None:
         nodes = self._visible_splat_nodes(scene)
         if not nodes:
             return None
 
-        world_means = means.astype(np.float32, copy=True)
+        world_means = means.clone()
         offset = 0
 
         for node in nodes:
@@ -415,27 +417,25 @@ class HistogramPanel(Panel):
             if next_offset > world_means.shape[0]:
                 return None
 
-            transform = np.asarray(node.world_transform, dtype=np.float32).reshape(4, 4)
-            world_means[offset:next_offset] = (
-                world_means[offset:next_offset] @ transform[:3, :3].T
-            ) + transform[:3, 3].reshape(1, 3)
+            matrix = lf.mat4([list(row) for row in node.world_transform]).cpu().to("float32")
+            rotation = matrix[:3, :3].transpose(0, 1)
+            translation = matrix[:3, 3].unsqueeze(0).expand([count, 3])
+            world_means[offset:next_offset] = world_means[offset:next_offset].matmul(rotation) + translation
             offset = next_offset
 
         if offset != world_means.shape[0]:
             return None
         return world_means
 
-    def _distance_from_positions(self, scene, positions: np.ndarray) -> np.ndarray:
-        finite_rows = np.all(np.isfinite(positions), axis=1)
-        if not np.any(finite_rows):
-            return np.full((positions.shape[0],), np.nan, dtype=np.float32)
+    def _distance_from_positions(self, scene, positions: lf.Tensor) -> lf.Tensor:
+        finite_rows = positions.isfinite().all(1).reshape([-1])
+        if not self._any_true(finite_rows):
+            return self._nan_tensor(int(positions.shape[0]))
 
         center = self._resolve_scene_center(scene, positions, finite_rows)
-        distances = np.full((positions.shape[0],), np.nan, dtype=np.float32)
-        distances[finite_rows] = np.linalg.norm(
-            positions[finite_rows] - center.reshape(1, 3),
-            axis=1,
-        ).astype(np.float32, copy=False)
+        distances = self._nan_tensor(int(positions.shape[0]))
+        centered = positions[finite_rows] - center.unsqueeze(0)
+        distances[finite_rows] = centered.square().sum(1).sqrt().reshape([-1])
         return distances
 
     def _visible_splat_nodes(self, scene) -> list:
@@ -484,43 +484,47 @@ class HistogramPanel(Panel):
                 continue
         return splat_nodes
 
-    def _resolve_scene_center(self, scene, means: np.ndarray, finite_rows: np.ndarray) -> np.ndarray:
+    def _resolve_scene_center(self, scene, means: lf.Tensor, finite_rows: lf.Tensor) -> lf.Tensor:
         try:
-            center = self._tensor_to_numpy(scene.scene_center).reshape(-1)
-            if center.size == 3 and np.all(np.isfinite(center)):
-                return center.astype(np.float32, copy=False)
+            center = self._cpu_float_tensor(scene.scene_center).reshape([-1])
+            if center.shape == (3,) and center.isfinite().all().bool_():
+                return center
         except Exception:
             pass
 
         finite_means = means[finite_rows]
-        if finite_means.size == 0:
-            return np.zeros((3,), dtype=np.float32)
-        return finite_means.mean(axis=0, dtype=np.float32)
+        if finite_means.numel == 0:
+            return lf.Tensor.zeros([3], dtype="float32", device="cpu")
+        return finite_means.mean(0).reshape([-1]).to("float32")
 
     @staticmethod
-    def _tensor_to_numpy(tensor, dtype=np.float32) -> np.ndarray:
-        cpu_tensor = tensor.contiguous().cpu()
-        values = np.asarray(cpu_tensor.numpy(copy=False))
-        if dtype is None:
-            return values
-        return values.astype(dtype, copy=False)
+    def _cpu_float_tensor(tensor) -> lf.Tensor:
+        return tensor.contiguous().cpu().to("float32")
 
-    def _extract_visible_mask(self, model, value_count: int) -> np.ndarray:
+    @staticmethod
+    def _any_true(mask: lf.Tensor) -> bool:
+        return bool(mask.count_nonzero())
+
+    @staticmethod
+    def _nan_tensor(size: int) -> lf.Tensor:
+        return lf.Tensor.full([size], float("nan"), dtype="float32", device="cpu")
+
+    def _extract_visible_mask(self, model, value_count: int) -> lf.Tensor | None:
         try:
             if bool(model.has_deleted_mask()):
-                deleted = self._tensor_to_numpy(model.deleted, dtype=np.bool_).reshape(-1)
-                if deleted.size == value_count:
-                    return np.logical_not(deleted)
+                deleted = model.deleted.contiguous().cpu().reshape([-1]).to("bool")
+                if int(deleted.shape[0]) == value_count:
+                    return ~deleted
         except Exception:
             pass
-        return np.ones((value_count,), dtype=np.bool_)
+        return None
 
-    def _histogram_bounds(self, values: np.ndarray) -> tuple[float, float]:
+    def _histogram_bounds(self, values: lf.Tensor) -> tuple[float, float]:
         if self._metric_id == "opacity":
             return 0.0, 1.0
 
-        lo = float(values.min())
-        hi = float(values.max())
+        lo = values.min_scalar()
+        hi = values.max_scalar()
         if not math.isfinite(lo) or not math.isfinite(hi):
             return 0.0, 1.0
 
@@ -529,6 +533,44 @@ class HistogramPanel(Panel):
             return lo - padding, hi + padding
 
         return lo, hi
+
+    def _build_histogram(self, values: lf.Tensor, histogram_min: float, histogram_max: float) -> tuple[list[int], list[float]]:
+        edges = [
+            histogram_min + (histogram_max - histogram_min) * (index / BIN_COUNT)
+            for index in range(BIN_COUNT + 1)
+        ]
+
+        span = histogram_max - histogram_min
+        if not math.isfinite(span) or span <= 0.0:
+            counts = [0] * BIN_COUNT
+            if values.numel > 0:
+                counts[-1] = int(values.shape[0])
+            return counts, edges
+
+        bin_indices = (((values - histogram_min) / span) * BIN_COUNT).floor().clamp(0.0, float(BIN_COUNT - 1)).to("int32")
+        counts = [0] * BIN_COUNT
+        for index in bin_indices.tolist():
+            counts[int(index)] += 1
+        return counts, edges
+
+    @staticmethod
+    def _percentile_from_sorted(sorted_values: lf.Tensor, percentile: float) -> float:
+        count = int(sorted_values.shape[0])
+        if count <= 0:
+            return 0.0
+        if count == 1:
+            return sorted_values[0].item()
+
+        position = (count - 1) * max(0.0, min(percentile, 100.0)) / 100.0
+        lower = int(math.floor(position))
+        upper = int(math.ceil(position))
+        if lower == upper:
+            return sorted_values[lower].item()
+
+        weight = position - lower
+        lower_value = sorted_values[lower].item()
+        upper_value = sorted_values[upper].item()
+        return lower_value + (upper_value - lower_value) * weight
 
     def _on_chart_mousedown(self, event):
         if not self._show_chart or self._chart_el is None or self._hist_edges is None:
@@ -605,7 +647,7 @@ class HistogramPanel(Panel):
         range_min = float(self._hist_edges[lo])
         range_max = float(self._hist_edges[hi + 1])
         selection_mask = self._selection_mask_for_range(range_min, range_max, hi == BIN_COUNT - 1)
-        self._marked_count = int(selection_mask.sum()) if selection_mask is not None else 0
+        self._marked_count = int(selection_mask.count_nonzero()) if selection_mask is not None else 0
         self._marked_range_text = self._format_range_text(range_min, range_max)
         self._marked_count_text = _trf(
             "histogram.gaussian_count",
@@ -651,19 +693,19 @@ class HistogramPanel(Panel):
         range_min: float,
         range_max: float,
         include_upper_bound: bool,
-    ) -> np.ndarray | None:
+    ) -> lf.Tensor | None:
         if self._cached_values is None:
             return None
 
         values = self._cached_values
-        mask = np.isfinite(values)
-        if self._visible_mask is not None and self._visible_mask.size == values.size:
-            mask &= self._visible_mask
-        mask &= values >= range_min
+        mask = values.isfinite()
+        if self._visible_mask is not None and self._visible_mask.shape == values.shape:
+            mask = mask & self._visible_mask
+        mask = mask & (values >= range_min)
         if include_upper_bound:
-            mask &= values <= range_max
+            mask = mask & (values <= range_max)
         else:
-            mask &= values < range_max
+            mask = mask & (values < range_max)
         return mask
 
     def _apply_scene_selection(self, range_min: float, range_max: float, include_upper_bound: bool):
@@ -673,7 +715,7 @@ class HistogramPanel(Panel):
             return
 
         mask = self._selection_mask_for_range(range_min, range_max, include_upper_bound)
-        if mask is None or not np.any(mask):
+        if mask is None or not self._any_true(mask):
             scene.clear_selection()
             self._applied_selection_values = None
             return
@@ -684,11 +726,10 @@ class HistogramPanel(Panel):
         except Exception:
             pass
 
-        selection_values = np.zeros((mask.size,), dtype=np.uint8)
-        selection_values[mask] = np.uint8(group_id)
-        selection_tensor = lf.Tensor.from_numpy(selection_values, copy=True)
-        scene.set_selection_mask(selection_tensor)
-        self._applied_selection_values = selection_values
+        selection_values = lf.Tensor.zeros([int(mask.shape[0])], dtype="uint8", device="cpu")
+        selection_values[mask] = float(group_id)
+        scene.set_selection_mask(selection_values)
+        self._applied_selection_values = selection_values.clone()
 
     def _clear_owned_scene_selection(self):
         scene = lf.get_scene()
@@ -706,10 +747,10 @@ class HistogramPanel(Panel):
 
         return (
             current_values.shape == self._applied_selection_values.shape and
-            np.array_equal(current_values, self._applied_selection_values)
+            (current_values == self._applied_selection_values).all().bool_()
         )
 
-    def _scene_selection_values(self, scene) -> np.ndarray | None:
+    def _scene_selection_values(self, scene) -> lf.Tensor | None:
         try:
             selection_mask = scene.selection_mask
         except Exception:
@@ -719,7 +760,7 @@ class HistogramPanel(Panel):
             return None
 
         try:
-            return self._tensor_to_numpy(selection_mask, dtype=np.uint8).reshape(-1)
+            return selection_mask.contiguous().cpu().reshape([-1]).to("uint8")
         except Exception:
             return None
 

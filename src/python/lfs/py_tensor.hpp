@@ -54,6 +54,8 @@ namespace lfs::python {
 
         // NumPy conversion
         nb::object numpy(bool copy = true) const;
+        nb::object tolist() const;
+        size_t count_nonzero() const;
 
         // Static factory: create from NumPy
         static PyTensor from_numpy(nb::ndarray<> arr, bool copy = true);
@@ -166,6 +168,7 @@ namespace lfs::python {
         PyTensor any(std::optional<int> dim = std::nullopt, bool keepdim = false) const;
         PyTensor norm(float p = 2.0f) const;
         float norm_scalar(float p = 2.0f) const;
+        nb::tuple sort(int dim = -1, bool descending = false) const;
 
         // Shape operations
         PyTensor reshape(const std::vector<int64_t>& new_shape) const;

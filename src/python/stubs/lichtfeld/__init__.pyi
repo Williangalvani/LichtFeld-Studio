@@ -507,6 +507,12 @@ class Tensor:
     def numpy(self, copy: bool = True) -> object:
         """Convert to NumPy array"""
 
+    def tolist(self) -> object:
+        """Convert tensor to nested Python lists"""
+
+    def count_nonzero(self) -> int:
+        """Count non-zero elements"""
+
     @staticmethod
     def from_numpy(arr: NDArray, copy: bool = True) -> Tensor:
         """Create tensor from NumPy array"""
@@ -889,6 +895,9 @@ class Tensor:
 
     def norm_scalar(self, p: float = 2.0) -> float:
         """Lp norm as scalar"""
+
+    def sort(self, dim: int = -1, descending: bool = False) -> tuple:
+        """Sort tensor values along a dimension and return (values, indices)"""
 
     def index_select(self, dim: int, indices: Tensor) -> Tensor:
         """Select along dimension by indices"""
