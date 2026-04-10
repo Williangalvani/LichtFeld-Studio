@@ -9,8 +9,8 @@
 #include "rendering/rendering_manager.hpp"
 #include "theme/theme.hpp"
 #include <algorithm>
-#include <imgui.h>
 #include <optional>
+#include <imgui.h>
 
 namespace lfs::vis::tools {
 
@@ -99,7 +99,7 @@ namespace lfs::vis::tools {
 
             return renderToScreen(proj, glm::vec2(projected->x, projected->y));
         }
-    }
+    } // namespace
 
     static float calculateScreenRadius(const glm::vec3& world_pos,
                                        const float world_radius,

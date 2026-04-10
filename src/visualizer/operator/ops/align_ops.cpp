@@ -11,8 +11,8 @@
 #include "operator/operator_registry.hpp"
 #include "rendering/rendering_manager.hpp"
 #include "scene/scene_manager.hpp"
-#include "visualizer_impl.hpp"
 #include "visualizer/scene_coordinate_utils.hpp"
+#include "visualizer_impl.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace lfs::vis::op {
