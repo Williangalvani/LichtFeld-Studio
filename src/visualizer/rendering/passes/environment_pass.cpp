@@ -4,6 +4,8 @@
 
 #include "environment_pass.hpp"
 #include "core/logger.hpp"
+#include "core/executable_path.hpp"
+#include "internal/resource_paths.hpp"
 #include <glad/glad.h>
 
 namespace lfs::vis {
@@ -74,14 +76,12 @@ namespace lfs::vis {
             return cached_environment_resolved_path_;
         }
 
-        const auto build_assets = std::filesystem::path(VISUALIZER_ASSET_PATH);
-        const auto source_assets = std::filesystem::path(VISUALIZER_SOURCE_ASSET_PATH);
-
-        const auto build_candidate = build_assets / requested;
-        if (std::filesystem::exists(build_candidate)) {
-            cached_environment_resolved_path_ = build_candidate;
-        } else {
-            cached_environment_resolved_path_ = source_assets / requested;
+        try {
+            cached_environment_resolved_path_ = getAssetPath(path_value);
+        } catch (const std::exception&) {
+            // Keep returning a deterministic runtime asset location so the renderer can
+            // surface a clean "not found" warning without throwing during rendering.
+            cached_environment_resolved_path_ = lfs::core::getAssetsDir() / requested;
         }
         return cached_environment_resolved_path_;
     }
