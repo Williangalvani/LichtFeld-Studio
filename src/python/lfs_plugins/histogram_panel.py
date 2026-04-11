@@ -118,7 +118,7 @@ class HistogramPanel(Panel):
         self._compare_x_edges: list[float] | None = None
         self._compare_y_edges: list[float] | None = None
         self._selection_owned = False
-        self._pending_selection_commit = False
+        self._pending_selection_commit = 0
         self._active_mark_source: str | None = None
         self._panel_selection_mask: lf.Tensor | None = None
         self._selected_histogram_bins: set[int] = set()
@@ -302,8 +302,8 @@ class HistogramPanel(Panel):
             return False
 
         if scene_changed or history_changed:
-            if self._pending_selection_commit:
-                self._pending_selection_commit = False
+            if self._pending_selection_commit > 0:
+                self._pending_selection_commit -= 1
             else:
                 self._selection_owned = False
                 sync_selection_from_scene = True
@@ -578,7 +578,11 @@ class HistogramPanel(Panel):
             self._restore_histogram_mark_from_value_bounds(*mark_bounds)
             self._sync_marked_range(apply_scene=False, preserve_value_bounds=True)
         elif self._active_mark_source == "histogram" and self._panel_selection_mask is not None:
-            self._commit_histogram_mask_selection(self._panel_selection_mask, apply_scene=False)
+            self._commit_histogram_mask_selection(
+                self._panel_selection_mask,
+                apply_scene=False,
+                overlay_bounds=self._histogram_overlay_bounds,
+            )
         elif reset_footer:
             self._reset_footer_mark_state(clear_scene=False)
 
@@ -1458,14 +1462,9 @@ class HistogramPanel(Panel):
         return int(mask.count_nonzero())
 
     def _capture_histogram_mark_value_bounds(self) -> tuple[float, float] | None:
-        if self._marked_value_min is not None and self._marked_value_max is not None:
-            return float(self._marked_value_min), float(self._marked_value_max)
-        if self._hist_edges is None:
+        if self._marked_value_min is None or self._marked_value_max is None:
             return None
-        lo, hi = self._marked_bounds_from_indices(len(self._hist_edges) - 1)
-        if lo is None or hi is None:
-            return None
-        return float(self._hist_edges[lo]), float(self._hist_edges[hi + 1])
+        return float(self._marked_value_min), float(self._marked_value_max)
 
     def _restore_histogram_mark_from_value_bounds(self, range_min: float, range_max: float):
         self._marked_value_min = float(min(range_min, range_max))
@@ -1557,27 +1556,70 @@ class HistogramPanel(Panel):
             return 0
         return int(mask.count_nonzero())
 
+    def _selection_mask_for_histogram_bin(self, bin_index: int) -> lf.Tensor | None:
+        if self._hist_edges is None or bin_index < 0 or bin_index + 1 >= len(self._hist_edges):
+            return None
+        return self._selection_mask_for_value_bounds(
+            float(self._hist_edges[bin_index]),
+            float(self._hist_edges[bin_index + 1]),
+        )
+
+    def _toggle_histogram_bin_selection(self, bin_index: int) -> bool:
+        base_mask = self._drag_selection_base_mask
+        if base_mask is None:
+            base_mask = self._current_selection_mask_for_source("histogram")
+        if base_mask is None:
+            return False
+
+        bin_mask = self._selection_mask_for_histogram_bin(bin_index)
+        normalized_base = self._normalize_selection_mask(base_mask, self._primary_values)
+        if normalized_base is None or bin_mask is None:
+            return False
+
+        if not self._any_true(normalized_base & bin_mask):
+            return False
+
+        next_mask = normalized_base & ~bin_mask
+        if self._any_true(next_mask):
+            self._commit_histogram_mask_selection(next_mask, apply_scene=True)
+        else:
+            self._reset_marked_state(clear_scene=True)
+        return True
+
+    def _maybe_promote_histogram_drag_selection_mode(self, event) -> bool:
+        if self._drag_selection_mode != "replace":
+            return False
+        mode = self._selection_mode_from_event(event)
+        if mode == "replace":
+            return False
+        self._drag_selection_mode = mode
+        if self._drag_selection_base_mask is None:
+            self._drag_selection_base_mask = self._current_selection_mask_for_source("histogram")
+        return True
+
     def _apply_scene_selection_mask(self, mask: lf.Tensor | None):
         scene = lf.get_scene()
         if scene is None or not scene.is_valid():
             self._selection_owned = False
-            self._pending_selection_commit = False
+            self._pending_selection_commit = 0
             return
 
         normalized = self._normalize_selection_mask(mask, self._primary_values if self._primary_values is not None else self._compare_values)
         if normalized is None or not self._any_true(normalized):
             scene.clear_selection()
             self._selection_owned = False
-            self._pending_selection_commit = False
+            self._pending_selection_commit = 0
             return
 
         try:
             scene.set_selection_mask(normalized.contiguous())
             self._selection_owned = True
-            self._pending_selection_commit = True
+            # A histogram commit can trigger separate scene and undo/history updates.
+            # Keep ownership across both so we do not immediately resync stale scene state.
+            self._pending_selection_commit = 2
         except Exception:
             self._selection_owned = False
-            self._pending_selection_commit = False
+            self._pending_selection_commit = 0
 
     def _clear_histogram_overlay(self):
         self._histogram_overlay_bounds = None
@@ -1912,9 +1954,7 @@ class HistogramPanel(Panel):
             pass
 
         self._drag_selection_mode = self._selection_mode_from_event(event)
-        self._drag_selection_base_mask = None
-        if self._drag_selection_mode != "replace":
-            self._drag_selection_base_mask = self._current_selection_mask_for_source("histogram")
+        self._drag_selection_base_mask = self._current_selection_mask_for_source("histogram")
         self._clear_compare_mark(clear_scene=False)
         bin_index = self._bin_index_for_mouse_x(self._event_mouse_x(event))
         self._dragging_mark = True
@@ -1960,8 +2000,9 @@ class HistogramPanel(Panel):
             return
 
         if self._dragging_mark and self._chart_el is not None:
+            mode_changed = self._maybe_promote_histogram_drag_selection_mode(event)
             bin_index = self._bin_index_for_mouse_x(self._event_mouse_x(event))
-            if bin_index == self._marked_bin_end:
+            if bin_index == self._marked_bin_end and not mode_changed:
                 return
             self._marked_bin_end = bin_index
             self._sync_marked_range(apply_scene=False)
@@ -1977,7 +2018,15 @@ class HistogramPanel(Panel):
             return
 
         if self._dragging_mark:
-            self._sync_marked_range(apply_scene=True)
+            self._maybe_promote_histogram_drag_selection_mode(event)
+            toggled = (
+                self._drag_selection_mode == "replace" and
+                self._marked_bin_start is not None and
+                self._marked_bin_start == self._marked_bin_end and
+                self._toggle_histogram_bin_selection(self._marked_bin_start)
+            )
+            if not toggled:
+                self._sync_marked_range(apply_scene=True)
             self._dragging_mark = False
             self._drag_selection_mode = "replace"
             self._drag_selection_base_mask = None
@@ -2204,7 +2253,7 @@ class HistogramPanel(Panel):
             self._clear_owned_scene_selection()
         else:
             self._selection_owned = False
-            self._pending_selection_commit = False
+            self._pending_selection_commit = 0
 
     def _reset_marked_state(self, clear_scene: bool):
         self._reset_footer_mark_state(clear_scene=clear_scene)
@@ -2296,7 +2345,7 @@ class HistogramPanel(Panel):
         if scene is not None and scene.is_valid() and self._selection_owned:
             scene.clear_selection()
         self._selection_owned = False
-        self._pending_selection_commit = False
+        self._pending_selection_commit = 0
 
     @staticmethod
     def _history_generation_value() -> int:

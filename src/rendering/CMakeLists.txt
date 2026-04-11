@@ -49,6 +49,7 @@ target_link_libraries(lfs_rendering
         glad::glad
         ${OPENGL_LIBRARIES}
         CUDA::cudart
+        OpenImageIO::OpenImageIO
         spdlog::spdlog
         Freetype::Freetype
 )

@@ -642,6 +642,42 @@ def test_histogram_shift_drag_adds_with_modifier_bitmask(histogram_panel_module,
     assert panel._histogram_overlay_bounds == (5, 5)
 
 
+def test_histogram_shift_drag_selection_survives_rebuild(histogram_panel_module, lf, numpy, monkeypatch):
+    panel = histogram_panel_module.HistogramPanel()
+    panel._show_chart = True
+    panel._metric_id = "opacity"
+    panel._chart_el = SimpleNamespace(absolute_left=0.0, absolute_width=160.0)
+
+    values = lf.Tensor.from_numpy(numpy.array([0.05, 0.15, 0.35], dtype=numpy.float32))
+    finite_mask = values.isfinite()
+    panel._primary_values = values
+    panel._primary_finite_mask = finite_mask
+    panel._primary_valid_values = values[finite_mask]
+    panel._primary_histogram_min = 0.0
+    panel._primary_histogram_max = 1.0
+    panel._histogram_bin_count = 16
+    panel._rebuild_histogram_from_cache()
+
+    scene = _SceneSelectionStub()
+    monkeypatch.setattr(lf, "get_scene", lambda: scene)
+
+    panel._marked_bin_start = 0
+    panel._marked_bin_end = 0
+    panel._sync_marked_range(apply_scene=True)
+
+    x = 5 * 10.0 + 1.0
+    panel._on_chart_mousedown(_MouseEventStub(mouse_x=x, shift=True))
+    panel._on_document_mousemove(_MouseEventStub(mouse_x=x, shift=True))
+    panel._on_document_mouseup(_MouseEventStub(mouse_x=x, shift=True))
+
+    panel._rebuild_histogram_from_cache()
+
+    numpy.testing.assert_array_equal(scene.selection_mask.cpu().numpy(), numpy.array([True, False, True], dtype=bool))
+    assert panel._selected_histogram_bins == {0, 5}
+    assert panel._marked_range_text == "Multiple ranges"
+    assert panel._histogram_overlay_bounds == (5, 5)
+
+
 def test_histogram_ctrl_drag_subtracts_from_existing_selection(histogram_panel_module, lf, numpy, monkeypatch):
     panel = histogram_panel_module.HistogramPanel()
     panel._show_chart = True
@@ -671,6 +707,40 @@ def test_histogram_ctrl_drag_subtracts_from_existing_selection(histogram_panel_m
 
     numpy.testing.assert_array_equal(scene.selection_mask.cpu().numpy(), numpy.array([True, False, True], dtype=bool))
     assert panel._marked_count == 2
+    assert panel._selected_histogram_bins == {0, 5}
+    assert panel._marked_range_text == "Multiple ranges"
+    assert panel._histogram_overlay_bounds == (2, 2)
+
+
+def test_histogram_ctrl_drag_selection_survives_rebuild(histogram_panel_module, lf, numpy, monkeypatch):
+    panel = histogram_panel_module.HistogramPanel()
+    panel._show_chart = True
+    panel._metric_id = "opacity"
+    panel._chart_el = SimpleNamespace(absolute_left=0.0, absolute_width=160.0)
+
+    values = lf.Tensor.from_numpy(numpy.array([0.05, 0.15, 0.35], dtype=numpy.float32))
+    finite_mask = values.isfinite()
+    panel._primary_values = values
+    panel._primary_finite_mask = finite_mask
+    panel._primary_valid_values = values[finite_mask]
+    panel._primary_histogram_min = 0.0
+    panel._primary_histogram_max = 1.0
+    panel._histogram_bin_count = 16
+    panel._rebuild_histogram_from_cache()
+
+    scene = _SceneSelectionStub()
+    monkeypatch.setattr(lf, "get_scene", lambda: scene)
+
+    panel._on_keydown(_KeyEventStub(KI_A, ctrl=True))
+
+    x = 2 * 10.0 + 1.0
+    panel._on_chart_mousedown(_MouseEventStub(mouse_x=x, ctrl=True))
+    panel._on_document_mousemove(_MouseEventStub(mouse_x=x, ctrl=True))
+    panel._on_document_mouseup(_MouseEventStub(mouse_x=x, ctrl=True))
+
+    panel._rebuild_histogram_from_cache()
+
+    numpy.testing.assert_array_equal(scene.selection_mask.cpu().numpy(), numpy.array([True, False, True], dtype=bool))
     assert panel._selected_histogram_bins == {0, 5}
     assert panel._marked_range_text == "Multiple ranges"
     assert panel._histogram_overlay_bounds == (2, 2)
@@ -706,6 +776,152 @@ def test_histogram_ctrl_drag_subtracts_with_modifier_bitmask(histogram_panel_mod
     assert panel._selected_histogram_bins == {0, 5}
     assert panel._marked_range_text == "Multiple ranges"
     assert panel._histogram_overlay_bounds == (2, 2)
+
+
+def test_histogram_shift_drag_selection_uses_modifier_seen_on_mouseup(histogram_panel_module, lf, numpy, monkeypatch):
+    panel = histogram_panel_module.HistogramPanel()
+    panel._show_chart = True
+    panel._metric_id = "opacity"
+    panel._chart_el = SimpleNamespace(absolute_left=0.0, absolute_width=160.0)
+
+    values = lf.Tensor.from_numpy(numpy.array([0.05, 0.15, 0.35], dtype=numpy.float32))
+    finite_mask = values.isfinite()
+    panel._primary_values = values
+    panel._primary_finite_mask = finite_mask
+    panel._primary_valid_values = values[finite_mask]
+    panel._primary_histogram_min = 0.0
+    panel._primary_histogram_max = 1.0
+    panel._histogram_bin_count = 16
+    panel._rebuild_histogram_from_cache()
+
+    scene = _SceneSelectionStub()
+    monkeypatch.setattr(lf, "get_scene", lambda: scene)
+
+    panel._marked_bin_start = 0
+    panel._marked_bin_end = 0
+    panel._sync_marked_range(apply_scene=True)
+
+    x = 5 * 10.0 + 1.0
+    panel._on_chart_mousedown(_MouseEventStub(mouse_x=x))
+    panel._on_document_mouseup(_MouseEventStub(mouse_x=x, shift=True))
+
+    numpy.testing.assert_array_equal(scene.selection_mask.cpu().numpy(), numpy.array([True, False, True], dtype=bool))
+    assert panel._selected_histogram_bins == {0, 5}
+    assert panel._marked_range_text == "Multiple ranges"
+    assert panel._histogram_overlay_bounds == (5, 5)
+
+
+def test_histogram_ctrl_drag_subtracts_when_modifier_is_seen_on_mouseup(histogram_panel_module, lf, numpy, monkeypatch):
+    panel = histogram_panel_module.HistogramPanel()
+    panel._show_chart = True
+    panel._metric_id = "opacity"
+    panel._chart_el = SimpleNamespace(absolute_left=0.0, absolute_width=160.0)
+
+    values = lf.Tensor.from_numpy(numpy.array([0.05, 0.15, 0.35], dtype=numpy.float32))
+    finite_mask = values.isfinite()
+    panel._primary_values = values
+    panel._primary_finite_mask = finite_mask
+    panel._primary_valid_values = values[finite_mask]
+    panel._primary_histogram_min = 0.0
+    panel._primary_histogram_max = 1.0
+    panel._histogram_bin_count = 16
+    panel._rebuild_histogram_from_cache()
+
+    scene = _SceneSelectionStub()
+    monkeypatch.setattr(lf, "get_scene", lambda: scene)
+
+    panel._on_keydown(_KeyEventStub(KI_A, ctrl=True))
+
+    x = 2 * 10.0 + 1.0
+    panel._on_chart_mousedown(_MouseEventStub(mouse_x=x))
+    panel._on_document_mouseup(_MouseEventStub(mouse_x=x, ctrl=True))
+
+    numpy.testing.assert_array_equal(scene.selection_mask.cpu().numpy(), numpy.array([True, False, True], dtype=bool))
+    assert panel._selected_histogram_bins == {0, 5}
+    assert panel._marked_range_text == "Multiple ranges"
+    assert panel._histogram_overlay_bounds == (2, 2)
+
+
+def test_histogram_click_selected_bar_deselects_only_that_bar(histogram_panel_module, lf, numpy, monkeypatch):
+    panel = histogram_panel_module.HistogramPanel()
+    panel._show_chart = True
+    panel._metric_id = "opacity"
+    panel._chart_el = SimpleNamespace(absolute_left=0.0, absolute_width=160.0)
+
+    values = lf.Tensor.from_numpy(numpy.array([0.05, 0.15, 0.35], dtype=numpy.float32))
+    finite_mask = values.isfinite()
+    panel._primary_values = values
+    panel._primary_finite_mask = finite_mask
+    panel._primary_valid_values = values[finite_mask]
+    panel._primary_histogram_min = 0.0
+    panel._primary_histogram_max = 1.0
+    panel._histogram_bin_count = 16
+    panel._rebuild_histogram_from_cache()
+
+    scene = _SceneSelectionStub()
+    monkeypatch.setattr(lf, "get_scene", lambda: scene)
+
+    panel._marked_bin_start = 0
+    panel._marked_bin_end = 0
+    panel._sync_marked_range(apply_scene=True)
+
+    x = 5 * 10.0 + 1.0
+    panel._on_chart_mousedown(_MouseEventStub(mouse_x=x, shift=True))
+    panel._on_document_mousemove(_MouseEventStub(mouse_x=x, shift=True))
+    panel._on_document_mouseup(_MouseEventStub(mouse_x=x, shift=True))
+
+    panel._on_chart_mousedown(_MouseEventStub(mouse_x=x))
+    panel._on_document_mouseup(_MouseEventStub(mouse_x=x))
+
+    numpy.testing.assert_array_equal(scene.selection_mask.cpu().numpy(), numpy.array([True, False, False], dtype=bool))
+    assert panel._selected_histogram_bins == {0}
+    assert panel._histogram_overlay_bounds == (0, 0)
+
+
+def test_histogram_owned_modifier_selection_survives_two_follow_up_updates(histogram_panel_module, lf, numpy, monkeypatch):
+    panel = histogram_panel_module.HistogramPanel()
+    panel._show_chart = True
+    panel._metric_id = "opacity"
+    panel._chart_el = SimpleNamespace(absolute_left=0.0, absolute_width=160.0)
+    panel._scene_generation = 0
+    panel._history_generation = 0
+    panel._last_lang = "en"
+    panel._trainer_state = ""
+
+    values = lf.Tensor.from_numpy(numpy.array([0.05, 0.15, 0.35], dtype=numpy.float32))
+    finite_mask = values.isfinite()
+    panel._primary_values = values
+    panel._primary_finite_mask = finite_mask
+    panel._primary_valid_values = values[finite_mask]
+    panel._primary_histogram_min = 0.0
+    panel._primary_histogram_max = 1.0
+    panel._histogram_bin_count = 16
+    panel._rebuild_histogram_from_cache()
+
+    scene = _SceneSelectionStub(lf.Tensor.from_numpy(numpy.array([True, False, False], dtype=bool)))
+    monkeypatch.setattr(lf, "get_scene", lambda: scene)
+
+    panel._commit_histogram_mask_selection(
+        lf.Tensor.from_numpy(numpy.array([True, False, True], dtype=bool)),
+        apply_scene=False,
+        overlay_bounds=(5, 5),
+    )
+    panel._selection_owned = True
+    panel._pending_selection_commit = 2
+
+    scene_generations = iter([1, 1])
+    history_generations = iter([0, 1])
+    monkeypatch.setattr(lf, "get_scene_generation", lambda: next(scene_generations))
+    monkeypatch.setattr(panel, "_history_generation_value", lambda: next(history_generations))
+    monkeypatch.setattr(panel, "_sync_panel_space_state", lambda: False)
+    monkeypatch.setattr(lf.ui, "get_current_language", lambda: "en")
+
+    panel.on_update(None)
+    panel.on_update(None)
+
+    assert panel._selected_histogram_bins == {0, 5}
+    assert panel._marked_range_text == "Multiple ranges"
+    assert panel._histogram_overlay_bounds == (5, 5)
 
 
 def test_histogram_panel_can_toggle_between_bottom_dock_and_floating(histogram_panel_module, lf):
