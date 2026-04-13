@@ -1,9 +1,9 @@
 /* SPDX-FileCopyrightText: 2026 LichtFeld Studio Authors
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-#include "mcp/shared_scene_tools.hpp"
-#include "mcp/mcp_tools.hpp"
 #include "core/path_utils.hpp"
+#include "mcp/mcp_tools.hpp"
+#include "mcp/shared_scene_tools.hpp"
 
 #include <array>
 #include <filesystem>

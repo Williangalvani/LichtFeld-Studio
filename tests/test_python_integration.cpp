@@ -420,8 +420,8 @@ TEST_F(PythonIntegrationTest, DecoratorHookContextUsesLiveHookSnapshot) {
         .trainer = nullptr,
     };
 
-	    const auto result = runPythonHookContextSnippet(
-	        R"PY(
+    const auto result = runPythonHookContextSnippet(
+        R"PY(
 	import lichtfeld as lf
 	records = []
 	
@@ -437,17 +437,17 @@ TEST_F(PythonIntegrationTest, DecoratorHookContextUsesLiveHookSnapshot) {
 	        ctx.num_gaussians,
 	    ))
 	)PY",
-	        stale_snapshot,
-	        live_callback);
-	
-	    ASSERT_EQ(result.size(), 6u);
-	    EXPECT_EQ(result[0], live_callback.iteration);
-	    EXPECT_EQ(result[1], live_callback.iteration);
-	    EXPECT_EQ(result[2], static_cast<long long>(live_callback.num_gaussians));
-	    EXPECT_EQ(result[3], static_cast<long long>(live_callback.num_gaussians));
-	    EXPECT_EQ(result[4], live_callback.iteration);
-	    EXPECT_EQ(result[5], static_cast<long long>(live_callback.num_gaussians));
-	}
+        stale_snapshot,
+        live_callback);
+
+    ASSERT_EQ(result.size(), 6u);
+    EXPECT_EQ(result[0], live_callback.iteration);
+    EXPECT_EQ(result[1], live_callback.iteration);
+    EXPECT_EQ(result[2], static_cast<long long>(live_callback.num_gaussians));
+    EXPECT_EQ(result[3], static_cast<long long>(live_callback.num_gaussians));
+    EXPECT_EQ(result[4], live_callback.iteration);
+    EXPECT_EQ(result[5], static_cast<long long>(live_callback.num_gaussians));
+}
 
 TEST_F(PythonIntegrationTest, ScopedHandlerHookContextUsesLiveHookSnapshot) {
     const lfs::training::HookContext stale_snapshot{
@@ -465,8 +465,8 @@ TEST_F(PythonIntegrationTest, ScopedHandlerHookContextUsesLiveHookSnapshot) {
         .trainer = nullptr,
     };
 
-	    const auto result = runPythonHookContextSnippet(
-	        R"PY(
+    const auto result = runPythonHookContextSnippet(
+        R"PY(
 	import lichtfeld as lf
 	records = []
 	handler = lf.ScopedHandler()
@@ -484,17 +484,17 @@ TEST_F(PythonIntegrationTest, ScopedHandlerHookContextUsesLiveHookSnapshot) {
 	
 	handler.on_post_step(_hook)
 	)PY",
-	        stale_snapshot,
-	        live_callback);
-	
-	    ASSERT_EQ(result.size(), 6u);
-	    EXPECT_EQ(result[0], live_callback.iteration);
-	    EXPECT_EQ(result[1], live_callback.iteration);
-	    EXPECT_EQ(result[2], static_cast<long long>(live_callback.num_gaussians));
-	    EXPECT_EQ(result[3], static_cast<long long>(live_callback.num_gaussians));
-	    EXPECT_EQ(result[4], live_callback.iteration);
-	    EXPECT_EQ(result[5], static_cast<long long>(live_callback.num_gaussians));
-	}
+        stale_snapshot,
+        live_callback);
+
+    ASSERT_EQ(result.size(), 6u);
+    EXPECT_EQ(result[0], live_callback.iteration);
+    EXPECT_EQ(result[1], live_callback.iteration);
+    EXPECT_EQ(result[2], static_cast<long long>(live_callback.num_gaussians));
+    EXPECT_EQ(result[3], static_cast<long long>(live_callback.num_gaussians));
+    EXPECT_EQ(result[4], live_callback.iteration);
+    EXPECT_EQ(result[5], static_cast<long long>(live_callback.num_gaussians));
+}
 
 // NOTE: Tests that actually execute Python scripts require the lichtfeld module
 // to be importable, which depends on the CommandCenter and training infrastructure.
