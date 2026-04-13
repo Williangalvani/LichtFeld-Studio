@@ -308,14 +308,8 @@ jobs:
 
           endpoint_url="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           versioned_key="windows/nightly/${FILE_NAME}"
-          latest_key="windows/nightly/latest.zip"
 
           aws s3 cp "$FILE_NAME" "s3://${R2_BUCKET}/${versioned_key}" \
-            --endpoint-url "$endpoint_url" \
-            --content-type application/zip \
-            --only-show-errors
-
-          aws s3 cp "$FILE_NAME" "s3://${R2_BUCKET}/${latest_key}" \
             --endpoint-url "$endpoint_url" \
             --content-type application/zip \
             --only-show-errors
@@ -336,11 +330,9 @@ jobs:
             echo "- Nightly version: \`v${NIGHTLY_VERSION}\`"
             echo "- Commit: \`${FULL_SHA}\`"
             echo "- Built at: \`${BUILT_AT}\`"
-            echo "- Latest object key: \`windows/nightly/latest.zip\`"
-            echo "- Versioned object key: \`windows/nightly/${FILE_NAME}\`"
+            echo "- Object key: \`windows/nightly/${FILE_NAME}\`"
             if [ -n "${R2_PUBLIC_BASE_URL:-}" ]; then
               base_url="${R2_PUBLIC_BASE_URL%/}"
-              echo "- Latest URL: ${base_url}/windows/nightly/latest.zip"
               echo "- Versioned URL: ${base_url}/windows/nightly/${FILE_NAME}"
             else
               echo "- Set the \`R2_PUBLIC_BASE_URL\` environment variable to print public download URLs here."
