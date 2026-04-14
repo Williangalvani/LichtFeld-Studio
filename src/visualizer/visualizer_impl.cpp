@@ -1455,6 +1455,12 @@ namespace lfs::vis {
         }
         result->apply_step_scaling();
         parameter_manager_->importParams(*result);
+        parameter_manager_->markDirty();
+
+        // Bump scene generation so all panels (e.g. training panel) pick up
+        // the new parameter values.  Without this, importing a config after a
+        // dataset is already loaded leaves the UI showing stale defaults.
+        python::bump_scene_generation();
     }
 
     void VisualizerImpl::handleTrainingCompleted([[maybe_unused]] const state::TrainingCompleted& event) {
