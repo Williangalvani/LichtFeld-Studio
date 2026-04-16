@@ -1879,12 +1879,12 @@ namespace lfs::vis {
             else if (auto selected_id = controller_.selectedKeyframeId(); selected_id.has_value())
                 to_delete.push_back(*selected_id);
 
-            const auto& keyframes = controller_.timeline().keyframes();
-            const auto first_real_it = std::find_if(
-                keyframes.begin(), keyframes.end(),
-                [](const sequencer::Keyframe& keyframe) { return !keyframe.is_loop_point; });
-            if (first_real_it != keyframes.end())
-                std::erase(to_delete, first_real_it->id);
+            for (const auto& keyframe : keyframes) {
+                if (!keyframe.is_loop_point) {
+                    std::erase(to_delete, keyframe.id);
+                    break;
+                }
+            }
 
             bool removed_any = false;
             for (const auto id : to_delete)
