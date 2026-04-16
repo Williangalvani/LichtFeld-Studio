@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "gui/sequencer_viewport_edit_mode.hpp"
 #include "gui/rmlui/rml_fbo.hpp"
+#include "gui/sequencer_viewport_edit_mode.hpp"
 #include "sequencer/rml_sequencer_panel.hpp"
 #include <RmlUi/Core/EventListener.h>
 #include <cstddef>

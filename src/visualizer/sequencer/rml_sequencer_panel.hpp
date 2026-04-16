@@ -195,7 +195,7 @@ namespace lfs::vis {
         void handleTimelineInteraction(const Vec2& pos, float width, float height,
                                        const PanelInputState& input);
         void handleEasingStripeInteraction(float timeline_x, float timeline_width,
-                                          const PanelInputState& input);
+                                           const PanelInputState& input);
         void handleFilmStripInteraction(float timeline_x, float timeline_width,
                                         const PanelInputState& input,
                                         gui::FilmStripRenderer& film_strip);

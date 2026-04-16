@@ -892,7 +892,7 @@ namespace lfs::vis::gui {
             viewport_transform_drag_world_offset_ =
                 viewport_edit_mode_ == SequencerViewportEditMode::Translate
                     ? keyframe->position - worldPointAtDepth(
-                                              mouse_x, mouse_y, viewport_transform_drag_view_depth_)
+                                               mouse_x, mouse_y, viewport_transform_drag_view_depth_)
                     : glm::vec3(0.0f);
             guiFocusState().want_capture_mouse = true;
             rm->markDirty(DirtyFlag::OVERLAY);

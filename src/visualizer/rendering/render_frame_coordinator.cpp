@@ -13,9 +13,9 @@
 #include "scene/scene_manager.hpp"
 #include "scene/scene_render_state.hpp"
 #include "viewport_region_utils.hpp"
-#include <glad/glad.h>
 #include <algorithm>
 #include <cmath>
+#include <glad/glad.h>
 #include <string_view>
 #include <vector>
 

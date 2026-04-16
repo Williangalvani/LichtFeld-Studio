@@ -139,7 +139,6 @@ namespace lfs::vis::gui {
         int burst_remaining_ = 0;
         std::optional<HoverState> hover_state_;
         std::optional<float> last_hover_focus_time_;
-
     };
 
 } // namespace lfs::vis::gui

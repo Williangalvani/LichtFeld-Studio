@@ -16,9 +16,9 @@
 #include "gui/rmlui/rml_tooltip.hpp"
 #include "gui/rmlui/rmlui_manager.hpp"
 #include "gui/rmlui/rmlui_render_interface.hpp"
-#include "gui/ui_widgets.hpp"
 #include "gui/rmlui/sdl_rml_key_mapping.hpp"
 #include "gui/string_keys.hpp"
+#include "gui/ui_widgets.hpp"
 #include "internal/resource_paths.hpp"
 #include "io/video/video_export_options.hpp"
 #include "rendering/render_constants.hpp"
@@ -34,8 +34,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <format>
-#include <imgui.h>
 #include <imgui_impl_opengl3.h>
+#include <imgui.h>
 
 namespace lfs::vis {
 
@@ -1642,9 +1642,9 @@ namespace lfs::vis {
                              input, rm, sm, film_strip);
 
             cached_playhead_screen_x_ = timeline_pos.x + clampCenteredSpan(
-                timeToX(controller_.playhead(), 0.0f, tl_width),
-                tl_width,
-                PLAYHEAD_HANDLE_WIDTH * dp);
+                                                             timeToX(controller_.playhead(), 0.0f, tl_width),
+                                                             tl_width,
+                                                             PLAYHEAD_HANDLE_WIDTH * dp);
             playhead_in_range_ = cached_playhead_screen_x_ >= timeline_pos.x &&
                                  cached_playhead_screen_x_ <= timeline_pos.x + tl_width;
 
@@ -1766,9 +1766,9 @@ namespace lfs::vis {
         }
 
         const float playhead_x = pos.x + clampCenteredSpan(
-            timeToX(controller_.playhead(), 0.0f, width),
-            width,
-            PLAYHEAD_HANDLE_WIDTH * s);
+                                             timeToX(controller_.playhead(), 0.0f, width),
+                                             width,
+                                             PLAYHEAD_HANDLE_WIDTH * s);
         const float playhead_dist = std::abs(mx - playhead_x);
         bool on_playhead_handle = playhead_dist < PLAYHEAD_HIT_RADIUS * s;
 
