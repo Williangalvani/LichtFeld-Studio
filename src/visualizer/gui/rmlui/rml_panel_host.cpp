@@ -9,6 +9,7 @@
 #include "gui/rmlui/rml_panel_host.hpp"
 #include "core/logger.hpp"
 #include "gui/panel_layout.hpp"
+#include "gui/rmlui/rml_document_utils.hpp"
 #include "gui/rmlui/rml_input_utils.hpp"
 #include "gui/rmlui/rml_text_input_handler.hpp"
 #include "gui/rmlui/rml_theme.hpp"
@@ -33,10 +34,8 @@
 #include <cstddef>
 #include <filesystem>
 #include <format>
-#include <fstream>
 #include <imgui_impl_opengl3.h>
 #include <imgui_internal.h>
-#include <iterator>
 #include <string_view>
 
 namespace lfs::vis::gui {
@@ -155,50 +154,6 @@ namespace lfs::vis::gui {
     using rml_theme::colorToRmlAlpha;
 
     namespace {
-        constexpr std::string_view kFallbackFontResource = "rmlui/font_fallback.rcss";
-
-        std::string injectParseTimeFontFallback(std::string document_rml,
-                                                const std::filesystem::path& fallback_rcss_path) {
-            const std::string fallback_href = fallback_rcss_path.generic_string();
-            if (document_rml.find(fallback_href) != std::string::npos ||
-                document_rml.find(kFallbackFontResource) != std::string::npos) {
-                return document_rml;
-            }
-
-            const std::string fallback_link = std::format(
-                "\n  <link type=\"text/rcss\" href=\"{}\"/>\n", fallback_href);
-            if (const auto head_pos = document_rml.find("<head>"); head_pos != std::string::npos) {
-                document_rml.insert(head_pos + std::string_view("<head>").size(), fallback_link);
-                return document_rml;
-            }
-
-            const std::string head_block = std::format(
-                "<head>\n  <link type=\"text/rcss\" href=\"{}\"/>\n</head>\n", fallback_href);
-            if (const auto body_pos = document_rml.find("<body"); body_pos != std::string::npos) {
-                document_rml.insert(body_pos, head_block);
-                return document_rml;
-            }
-
-            if (const auto rml_pos = document_rml.find("<rml>"); rml_pos != std::string::npos) {
-                document_rml.insert(rml_pos + std::string_view("<rml>").size(),
-                                    std::string("\n") + head_block);
-            }
-            return document_rml;
-        }
-
-        std::optional<std::string> loadDocumentSourceWithFallback(
-            const std::filesystem::path& document_path) {
-            std::ifstream input(document_path, std::ios::binary);
-            if (!input)
-                return std::nullopt;
-
-            std::string document_rml{std::istreambuf_iterator<char>(input),
-                                     std::istreambuf_iterator<char>()};
-            const auto fallback_rcss_path =
-                lfs::vis::getAssetPath(std::string(kFallbackFontResource));
-            return injectParseTimeFontFallback(std::move(document_rml), fallback_rcss_path);
-        }
-
         bool pointInRoundedRect(const float x, const float y, const float w, const float h,
                                 const Rml::CornerSizes& radii) {
             if (x < 0.0f || y < 0.0f || x >= w || y >= h)
@@ -481,12 +436,7 @@ namespace lfs::vis::gui {
             const auto full_path = requested_path.is_absolute()
                                        ? requested_path
                                        : lfs::vis::getAssetPath(rml_path_);
-            if (auto document_source = loadDocumentSourceWithFallback(full_path)) {
-                document_ =
-                    rml_context_->LoadDocumentFromMemory(*document_source, full_path.generic_string());
-            } else {
-                document_ = rml_context_->LoadDocument(full_path.string());
-            }
+            document_ = rml_documents::loadDocument(rml_context_, full_path);
             if (document_) {
                 syncThemeProperties();
                 document_->Show();

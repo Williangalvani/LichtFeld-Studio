@@ -2,10 +2,14 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include "gui/rmlui/rml_document_utils.hpp"
 #include "gui/rmlui/rml_path_utils.hpp"
 #include "gui/rmlui/rml_theme.hpp"
 #include "gui/rmlui/rmlui_system_interface.hpp"
 
+#include <chrono>
+#include <format>
+#include <fstream>
 #include <gtest/gtest.h>
 
 TEST(RmlPathUtilsTest, FileUriRoundTripsPlatformPath) {
@@ -36,6 +40,37 @@ TEST(RmlPathUtilsTest, PathToRmlImageSourceEncodesSpaces) {
 
     EXPECT_EQ(source, "/tmp/lichtfeld%20studio/dropdown%20arrow.png");
 #endif
+}
+
+TEST(RmlDocumentUtilsTest, RewritesRelativeImageSourcesToResolvedImageSource) {
+    const auto test_root = std::filesystem::temp_directory_path() /
+                           std::format("lichtfeld-rml-{}", std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto document_path = test_root / "assets/rmlui/training.rml";
+    const auto icon_path = test_root / "assets/icon/settings.png";
+
+    std::filesystem::create_directories(document_path.parent_path());
+    std::filesystem::create_directories(icon_path.parent_path());
+    std::ofstream(icon_path, std::ios::binary) << "png";
+
+    const std::string rewritten = lfs::vis::gui::rml_documents::rewriteRelativeImageSources(
+        R"(<img class="training-panel-title-icon" src="../icon/settings.png" />)",
+        document_path);
+
+    EXPECT_NE(rewritten.find(lfs::vis::gui::rml_theme::pathToRmlImageSource(icon_path)),
+              std::string::npos);
+
+    std::filesystem::remove_all(test_root);
+}
+
+TEST(RmlDocumentUtilsTest, LeavesNonFileImageSourcesUnchanged) {
+    const auto document_path = std::filesystem::path("/tmp/lichtfeld/rmlui/test.rml");
+    const std::string source =
+        R"(<img src="preview://cam=1&amp;path=%2Ftmp%2Fimage.png" /><img src="file:///tmp/icon.png" />)";
+
+    const std::string rewritten =
+        lfs::vis::gui::rml_documents::rewriteRelativeImageSources(source, document_path);
+
+    EXPECT_EQ(rewritten, source);
 }
 
 #ifdef _WIN32

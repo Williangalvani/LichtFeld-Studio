@@ -10,6 +10,7 @@
 #include "core/events.hpp"
 #include "core/logger.hpp"
 #include "gui/film_strip_renderer.hpp"
+#include "gui/rmlui/rml_document_utils.hpp"
 #include "gui/rmlui/rml_input_utils.hpp"
 #include "gui/rmlui/rml_panel_host.hpp"
 #include "gui/rmlui/rml_theme.hpp"
@@ -325,7 +326,7 @@ namespace lfs::vis {
 
         try {
             const auto full_path = lfs::vis::getAssetPath("rmlui/sequencer.rml");
-            document_ = rml_context_->LoadDocument(full_path.string());
+            document_ = lfs::vis::gui::rml_documents::loadDocument(rml_context_, full_path);
             if (document_) {
                 document_->Show();
                 cacheElements();
