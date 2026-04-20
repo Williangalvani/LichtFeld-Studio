@@ -150,3 +150,30 @@ jobs:
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           set PATH=%CD%\build;%CD%\build\vcpkg_installed\x64-windows\bin;%PATH%
           cmake --build build -j %NUMBER_OF_PROCESSORS%
+
+      - name: Install
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake --install build --config ${{ matrix.build_type }} --prefix "%CD%\install"
+
+      - name: Upload install artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LichtFeld-Studio-windows-x64-${{ matrix.build_type }}
+          path: install
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload raw build artifact
+        if: failure() || matrix.build_type == 'Debug'
+        uses: actions/upload-artifact@v4
+        with:
+          name: LichtFeld-Studio-windows-x64-${{ matrix.build_type }}-build
+          path: |
+            build/*.exe
+            build/*.dll
+            build/*.pdb
+            build/vcpkg_installed/x64-windows/bin/*.dll
+          if-no-files-found: warn
+          retention-days: 7
